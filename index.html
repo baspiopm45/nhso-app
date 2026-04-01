@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NHSO AI Tracking</title>
+  <link rel="stylesheet" href="style.css" />
+  <!-- Google Identity Services -->
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+</head>
+<body>
+
+<!-- ════════════════════════════════════════════
+     LOGIN SCREEN
+════════════════════════════════════════════ -->
+<div id="login-screen">
+  <div class="login-card">
+    <div class="login-logo">🏥</div>
+    <h1>NHSO AI Tracking</h1>
+    <p class="subtitle">ระบบติดตาม AI ติดตั้ง Digital X-ray<br>โครงการหลักประกันสุขภาพแห่งชาติ</p>
+    <button class="btn-google" id="btn-google-login">
+      <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google" />
+      เข้าสู่ระบบด้วย Google
+    </button>
+    <p class="login-footer">เฉพาะผู้มีสิทธิ์เข้าใช้งานเท่านั้น</p>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════
+     MAIN APP
+════════════════════════════════════════════ -->
+<div id="app" class="hidden">
+
+  <!-- ── Sidebar ── -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-brand">
+      <div class="brand-icon">🏥</div>
+      <div class="brand-text">
+        <div class="name">NHSO AI Tracking</div>
+        <div class="sub">Digital X-ray Tracking System</div>
+      </div>
+    </div>
+
+    <nav class="sidebar-nav">
+      <div class="nav-section">หน้าหลัก</div>
+      <div class="nav-item active" data-page="dashboard">
+        <span class="icon">📊</span> Dashboard
+      </div>
+
+      <div class="nav-section">ข้อมูล</div>
+      <div class="nav-item" data-page="hospitals">
+        <span class="icon">🏨</span> รายการโรงพยาบาล
+      </div>
+      <div class="nav-item" data-page="tracking">
+        <span class="icon">📦</span> Doc Tracking
+      </div>
+
+      <div class="nav-section">จัดการ</div>
+      <div class="nav-item" data-page="add">
+        <span class="icon">➕</span> เพิ่มรายการใหม่
+      </div>
+    </nav>
+
+    <div class="sidebar-user">
+      <div class="user-avatar" id="user-avatar">U</div>
+      <div class="user-info">
+        <div class="user-name" id="user-name">Loading...</div>
+        <div class="user-email" id="user-email"></div>
+      </div>
+      <button class="btn-logout" id="btn-logout" title="ออกจากระบบ">🚪</button>
+    </div>
+  </aside>
+
+  <!-- ── Main Content ── -->
+  <div class="main-content">
+
+    <!-- Top Bar -->
+    <header class="topbar">
+      <div class="topbar-left">
+        <h2 id="page-title">Dashboard</h2>
+        <div class="breadcrumb" id="page-breadcrumb">NHSO / Dashboard</div>
+      </div>
+      <div class="topbar-right">
+        <div class="topbar-sync" id="sync-status">
+          <span>🔄</span> <span id="sync-text">กำลังโหลด...</span>
+        </div>
+        <button class="btn btn-outline btn-sm" id="btn-refresh">↺ รีเฟรช</button>
+      </div>
+    </header>
+
+    <!-- ══════════ DASHBOARD PAGE ══════════ -->
+    <main class="page" id="page-dashboard">
+
+      <!-- Stat Cards -->
+      <div class="stats-grid" id="stats-grid">
+        <div class="stat-card">
+          <div class="stat-icon blue">🏥</div>
+          <div class="stat-info">
+            <div class="value" id="stat-total">-</div>
+            <div class="label">รพ. ทั้งหมด</div>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon green">✅</div>
+          <div class="stat-info">
+            <div class="value" id="stat-lived">-</div>
+            <div class="label">Golive แล้ว</div>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon yellow">🚚</div>
+          <div class="stat-info">
+            <div class="value" id="stat-transit">-</div>
+            <div class="label">กำลังดำเนินการ</div>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon red">⏳</div>
+          <div class="stat-info">
+            <div class="value" id="stat-waiting">-</div>
+            <div class="label">รอดำเนินการ</div>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon purple">💰</div>
+          <div class="stat-info">
+            <div class="value" id="stat-paid">-</div>
+            <div class="label">ชำระแล้ว</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Charts -->
+      <div class="charts-row">
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">📊 สถานะการติดตั้ง</div>
+          </div>
+          <div class="bar-chart" id="chart-status"></div>
+        </div>
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">🗺️ เขตสุขภาพ (Top 5)</div>
+          </div>
+          <div class="bar-chart" id="chart-zone"></div>
+        </div>
+      </div>
+
+      <div class="charts-row">
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">📡 PACS ที่ใช้งาน</div>
+          </div>
+          <div class="bar-chart" id="chart-pacs"></div>
+        </div>
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">📋 Phase การดำเนินงาน</div>
+          </div>
+          <div class="bar-chart" id="chart-phase"></div>
+        </div>
+      </div>
+
+    </main>
+
+    <!-- ══════════ HOSPITALS PAGE ══════════ -->
+    <main class="page hidden" id="page-hospitals">
+
+      <div class="table-toolbar">
+        <div class="search-box">
+          <span class="icon">🔍</span>
+          <input type="text" id="search-input" placeholder="ค้นหาโรงพยาบาล, จังหวัด, HCODE..." />
+        </div>
+
+        <select class="filter-select" id="filter-phase">
+          <option value="">ทุก Phase</option>
+          <option value="1">Phase 1</option>
+          <option value="2">Phase 2</option>
+          <option value="2.1">Phase 2.1</option>
+          <option value="2.2">Phase 2.2</option>
+        </select>
+
+        <select class="filter-select" id="filter-status">
+          <option value="">ทุกสถานะ</option>
+          <option value="Lived">Lived</option>
+          <option value="Ready for Training">Ready for Training</option>
+          <option value="Machine in Transit">Machine in Transit</option>
+          <option value="In process config network with IT">In process config</option>
+          <option value="Waiting for Integrate with PACS">Waiting for PACS</option>
+          <option value="Waiting for Swaping">Waiting for Swaping</option>
+          <option value="-">-</option>
+        </select>
+
+        <select class="filter-select" id="filter-zone">
+          <option value="">ทุกเขตสุขภาพ</option>
+        </select>
+
+        <select class="filter-select" id="filter-sales">
+          <option value="">ทุก Sales</option>
+        </select>
+
+        <button class="btn btn-primary ml-auto" id="btn-add-row">
+          ➕ เพิ่มรายการ
+        </button>
+      </div>
+
+      <div class="table-wrap">
+        <div class="table-container">
+          <table id="data-table">
+            <thead>
+              <tr>
+                <th data-col="phase">Phase <span class="sort-icon"></span></th>
+                <th data-col="hospital">ชื่อหน่วยบริการ <span class="sort-icon"></span></th>
+                <th data-col="level">ระดับ <span class="sort-icon"></span></th>
+                <th data-col="province">จังหวัด <span class="sort-icon"></span></th>
+                <th data-col="zone">เขตฯ <span class="sort-icon"></span></th>
+                <th data-col="pacs">PACS <span class="sort-icon"></span></th>
+                <th data-col="status">สถานะ <span class="sort-icon"></span></th>
+                <th data-col="golive">Golive <span class="sort-icon"></span></th>
+                <th data-col="paid">Paid</th>
+                <th>จัดการ</th>
+              </tr>
+            </thead>
+            <tbody id="table-body">
+              <tr>
+                <td colspan="10">
+                  <div class="loading-wrap">
+                    <div class="spinner"></div>
+                    <span>กำลังโหลดข้อมูล...</span>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="table-footer">
+          <span id="table-info">-</span>
+          <div class="pagination" id="pagination"></div>
+        </div>
+      </div>
+
+    </main>
+
+    <!-- ══════════ DOC TRACKING PAGE ══════════ -->
+    <main class="page hidden" id="page-tracking">
+      <div class="table-toolbar">
+        <div class="search-box">
+          <span class="icon">🔍</span>
+          <input type="text" id="track-search" placeholder="ค้นหา..." />
+        </div>
+        <select class="filter-select" id="track-filter-phase">
+          <option value="">ทุก Phase</option>
+          <option value="1">Phase 1</option>
+          <option value="2">Phase 2</option>
+          <option value="2.1">Phase 2.1</option>
+          <option value="2.2">Phase 2.2</option>
+        </select>
+      </div>
+
+      <div class="table-wrap">
+        <div class="table-container">
+          <table id="track-table">
+            <thead>
+              <tr>
+                <th>Phase</th>
+                <th>ชื่อหน่วยบริการ</th>
+                <th>จังหวัด</th>
+                <th>Sales</th>
+                <th>Sales Doc</th>
+                <th>Contract Doc</th>
+                <th>Paid?</th>
+                <th>ใบตอบรับ</th>
+              </tr>
+            </thead>
+            <tbody id="track-body">
+              <tr>
+                <td colspan="8">
+                  <div class="loading-wrap">
+                    <div class="spinner"></div>
+                    <span>กำลังโหลด...</span>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="table-footer">
+          <span id="track-info">-</span>
+        </div>
+      </div>
+    </main>
+
+    <!-- ══════════ ADD PAGE ══════════ -->
+    <main class="page hidden" id="page-add">
+      <div class="card" style="max-width:800px;">
+        <div class="card-header">
+          <div class="card-title">➕ เพิ่มรายการโรงพยาบาลใหม่</div>
+        </div>
+        <div id="add-form-container">
+          <!-- form จะถูก inject โดย JS -->
+        </div>
+      </div>
+    </main>
+
+  </div><!-- /.main-content -->
+</div><!-- /#app -->
+
+<!-- ════════════════════════════════════════════
+     MODAL: Add / Edit
+════════════════════════════════════════════ -->
+<div class="modal-overlay hidden" id="modal-overlay">
+  <div class="modal" id="modal">
+    <div class="modal-header">
+      <span class="modal-title" id="modal-title">เพิ่มรายการ</span>
+      <button class="modal-close" id="modal-close">✕</button>
+    </div>
+    <div class="modal-body" id="modal-body">
+      <!-- injected by JS -->
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" id="modal-cancel">ยกเลิก</button>
+      <button class="btn btn-primary" id="modal-save">💾 บันทึก</button>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════
+     MODAL: Detail View
+════════════════════════════════════════════ -->
+<div class="modal-overlay hidden" id="detail-overlay">
+  <div class="modal" id="detail-modal" style="max-width:680px;">
+    <div class="modal-header">
+      <span class="modal-title" id="detail-title">รายละเอียด</span>
+      <button class="modal-close" id="detail-close">✕</button>
+    </div>
+    <div class="modal-body" id="detail-body"></div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" id="detail-edit-btn">✏️ แก้ไข</button>
+      <button class="btn btn-outline" id="detail-close-btn">ปิด</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast container -->
+<div id="toast-container"></div>
+
+<!-- Scripts -->
+<script src="config.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
