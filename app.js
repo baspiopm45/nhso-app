@@ -74,6 +74,24 @@ function boolIcon(val) {
   return '<span class="text-gray">-</span>';
 }
 
+
+function determineRole(email) {
+  if (!email) return null;
+  const em = email.toLowerCase();
+  if (em.endsWith('@' + CONFIG.ADMIN_DOMAIN)) return 'admin';
+  if (CONFIG.VIEWER_EMAILS.map(e => e.toLowerCase()).includes(em)) return 'viewer';
+  return null;
+}
+function isAdmin() { return STATE.role === 'admin'; }
+function isViewer() { return STATE.role === 'viewer'; }
+function applyRoleUI() {
+  if (isViewer()) {
+    ['hospitals','tracking','add'].forEach(p => document.querySelector(`.nav-item[data-page="${p}"]`)?.classList.add('hidden'));
+    document.getElementById('card-pacs')?.classList.add('hidden');
+    document.getElementById('btn-refresh').classList.add('hidden');
+    document.getElementById('sync-text').textContent = '👁 View Only';
+  }
+}
 // ════════════════════════════════════════════
 // GOOGLE AUTH
 // ════════════════════════════════════════════
@@ -101,7 +119,10 @@ async function handleToken(response) {
   }
   STATE.accessToken = response.access_token;
   await fetchUserInfo();
+  STATE.role = determineRole(STATE.user?.email);
+  if (!STATE.role) { toast('❌ ไม่มีสิทธิ์เข้าใช้งาน', 'error'); setTimeout(handleLogout, 2500); return; }
   showApp();
+  applyRoleUI();
   await loadSheetData();
 }
 
@@ -781,6 +802,7 @@ const PAGE_META = {
 };
 
 function navigateTo(pageName) {
+  if (isViewer && isViewer() && ['hospitals','tracking','add'].includes(pageName)) { toast('⚠️ ไม่มีสิทธิ์', 'warning'); return; }
   document.querySelectorAll('.page').forEach(p => p.classList.add('hidden'));
   document.getElementById(`page-${pageName}`)?.classList.remove('hidden');
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));

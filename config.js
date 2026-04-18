@@ -17,6 +17,8 @@ const CONFIG = {
 
   // 4) (Optional) จำกัดให้เฉพาะ email นี้ login ได้ เช่น 'yourteam.com'
   //    ถ้าไม่จำกัด ให้ตั้งเป็น null
+  ADMIN_DOMAIN: 'perceptra.tech',
+  VIEWER_EMAILS: ['nongkoi.nhso@gmail.com','baspiopm45@gmail.com'],
   ALLOWED_DOMAIN: null,
 
   // Column definitions (สำคัญ: ต้องตรงกับ Header row ใน Google Sheet)
