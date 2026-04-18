@@ -1,0 +1,1123 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NHSO X-Ray Viewer</title>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<style>
+  /* ── Claude-inspired design tokens ── */
+  :root {
+    --bg-base:      #f5f0e8;
+    --bg-surface:   #fffefb;
+    --bg-sidebar:   #ede8df;
+    --border:       #e2dbd0;
+    --border-light: #ede8df;
+    --text-primary: #1c1917;
+    --text-secondary:#6b6560;
+    --text-muted:   #a09890;
+    --accent:       #d97706;
+    --accent-light: #fef3c7;
+    --accent-dark:  #b45309;
+    --success:      #16a34a;
+    --success-bg:   #f0fdf4;
+    --warning:      #d97706;
+    --warning-bg:   #fffbeb;
+    --danger:       #dc2626;
+    --danger-bg:    #fef2f2;
+    --info:         #2563eb;
+    --info-bg:      #eff6ff;
+    --neutral:      #6b6560;
+    --neutral-bg:   #f5f0e8;
+    --radius-sm:    6px;
+    --radius-md:    10px;
+    --radius-lg:    14px;
+    --shadow-sm:    0 1px 3px rgba(28,25,23,0.08);
+    --shadow-md:    0 4px 12px rgba(28,25,23,0.10);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Segoe UI', 'Noto Sans Thai', -apple-system, sans-serif;
+    background: var(--bg-base);
+    color: var(--text-primary);
+    min-height: 100vh;
+    font-size: 14px;
+    line-height: 1.5;
+  }
+
+  /* ── Layout ── */
+  .layout { display: flex; min-height: 100vh; }
+
+  /* ── Sidebar ── */
+  .sidebar {
+    width: 240px;
+    background: var(--bg-sidebar);
+    border-right: 1px solid var(--border);
+    padding: 20px 0;
+    display: flex;
+    flex-direction: column;
+    position: fixed;
+    height: 100vh;
+    overflow-y: auto;
+  }
+
+  .sidebar-logo {
+    padding: 0 20px 20px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 12px;
+  }
+  .sidebar-logo .logo-mark {
+    width: 32px; height: 32px;
+    background: var(--accent);
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    color: white; font-weight: 700; font-size: 14px;
+    margin-bottom: 10px;
+  }
+  .sidebar-logo h2 {
+    font-size: 13px; font-weight: 700;
+    color: var(--text-primary); letter-spacing: 0.3px;
+  }
+  .sidebar-logo p {
+    font-size: 11px; color: var(--text-muted); margin-top: 2px;
+  }
+
+  .sidebar-section {
+    padding: 6px 12px;
+    margin-bottom: 4px;
+  }
+  .sidebar-section-label {
+    font-size: 10px; font-weight: 700;
+    color: var(--text-muted); letter-spacing: 0.8px;
+    text-transform: uppercase; padding: 0 8px 6px;
+  }
+
+  .nav-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 12px; border-radius: var(--radius-sm);
+    cursor: pointer; color: var(--text-secondary);
+    font-size: 13.5px; transition: all 0.15s;
+    text-decoration: none;
+  }
+  .nav-item:hover { background: rgba(28,25,23,0.06); color: var(--text-primary); }
+  .nav-item.active {
+    background: var(--bg-surface);
+    color: var(--text-primary);
+    font-weight: 600;
+    box-shadow: var(--shadow-sm);
+  }
+  .nav-item .icon { font-size: 15px; width: 18px; text-align: center; }
+
+  /* ── Main content ── */
+  .main {
+    margin-left: 240px;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+  }
+
+  /* ── Top bar ── */
+  .topbar {
+    background: var(--bg-surface);
+    border-bottom: 1px solid var(--border);
+    padding: 14px 28px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+  }
+  .topbar-title h1 {
+    font-size: 16px; font-weight: 700; color: var(--text-primary);
+  }
+  .topbar-title p {
+    font-size: 12px; color: var(--text-muted); margin-top: 1px;
+  }
+  .topbar-actions {
+    display: flex; align-items: center; gap: 10px;
+  }
+  .btn {
+    padding: 7px 14px; border-radius: var(--radius-sm);
+    font-size: 13px; font-weight: 500; cursor: pointer;
+    border: 1px solid transparent; transition: all 0.15s;
+    display: inline-flex; align-items: center; gap: 6px;
+  }
+  .btn-ghost {
+    background: transparent;
+    border-color: var(--border);
+    color: var(--text-secondary);
+  }
+  .btn-ghost:hover { background: var(--bg-base); color: var(--text-primary); }
+  .btn-primary {
+    background: var(--accent);
+    color: white;
+    border-color: var(--accent);
+  }
+  .btn-primary:hover { background: var(--accent-dark); }
+
+  .last-update {
+    font-size: 11.5px;
+    color: var(--text-muted);
+    display: flex; align-items: center; gap: 5px;
+  }
+  .pulse {
+    width: 7px; height: 7px;
+    background: var(--success);
+    border-radius: 50%;
+    animation: pulse 2s infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+
+  /* ── Page body ── */
+  .page-body { padding: 24px 28px; flex: 1; }
+
+  /* ── Stat cards ── */
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 14px;
+    margin-bottom: 24px;
+  }
+  .stat-card {
+    background: var(--bg-surface);
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius-md);
+    padding: 18px 20px;
+    box-shadow: var(--shadow-sm);
+    transition: box-shadow 0.2s;
+  }
+  .stat-card:hover { box-shadow: var(--shadow-md); }
+  .stat-card .stat-label {
+    font-size: 12px; color: var(--text-muted);
+    font-weight: 500; margin-bottom: 8px;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .stat-card .stat-label .dot {
+    width: 7px; height: 7px; border-radius: 50%;
+  }
+  .stat-card .stat-value {
+    font-size: 28px; font-weight: 700; color: var(--text-primary);
+    line-height: 1;
+  }
+  .stat-card .stat-sub {
+    font-size: 11px; color: var(--text-muted); margin-top: 5px;
+  }
+  .stat-card.accent-border { border-top: 3px solid var(--accent); }
+  .stat-card.success-border { border-top: 3px solid var(--success); }
+  .stat-card.warning-border { border-top: 3px solid var(--warning); }
+  .stat-card.info-border { border-top: 3px solid var(--info); }
+
+  /* ── Section header ── */
+  .section-header {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 14px;
+  }
+  .section-title {
+    font-size: 14px; font-weight: 700; color: var(--text-primary);
+    display: flex; align-items: center; gap: 8px;
+  }
+  .section-title .count-badge {
+    background: var(--accent-light);
+    color: var(--accent-dark);
+    font-size: 11px; font-weight: 700;
+    padding: 2px 8px; border-radius: 20px;
+  }
+
+  /* ── Filter bar ── */
+  .filter-bar {
+    display: flex; align-items: center; gap: 10px;
+    margin-bottom: 16px; flex-wrap: wrap;
+  }
+  .filter-bar input, .filter-bar select {
+    padding: 8px 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--bg-surface);
+    font-size: 13px; color: var(--text-primary);
+    outline: none; transition: border-color 0.15s;
+    font-family: inherit;
+  }
+  .filter-bar input:focus, .filter-bar select:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(217,119,6,0.1);
+  }
+  .filter-bar input { width: 220px; }
+  .filter-bar select { min-width: 130px; cursor: pointer; }
+  .filter-count {
+    font-size: 12px; color: var(--text-muted);
+    margin-left: auto;
+  }
+
+  /* ── Table ── */
+  .table-wrap {
+    background: var(--bg-surface);
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-sm);
+    overflow: hidden;
+  }
+  table {
+    width: 100%; border-collapse: collapse;
+    font-size: 13px;
+  }
+  thead {
+    background: var(--bg-base);
+    border-bottom: 1px solid var(--border);
+  }
+  th {
+    padding: 10px 14px;
+    text-align: left;
+    font-size: 11.5px; font-weight: 700;
+    color: var(--text-muted);
+    letter-spacing: 0.4px;
+    text-transform: uppercase;
+    white-space: nowrap;
+    cursor: pointer; user-select: none;
+  }
+  th:hover { color: var(--text-primary); }
+  th.sort-asc::after { content: " ↑"; }
+  th.sort-desc::after { content: " ↓"; }
+  td {
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border-light);
+    color: var(--text-primary);
+    vertical-align: middle;
+  }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: rgba(237,232,223,0.35); }
+
+  /* ── Status badges ── */
+  .badge {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 3px 10px; border-radius: 20px;
+    font-size: 11.5px; font-weight: 600; white-space: nowrap;
+  }
+  .badge::before { content: ''; width: 6px; height: 6px; border-radius: 50%; }
+
+  .badge-golive, .badge-completed {
+    background: var(--success-bg); color: var(--success);
+  }
+  .badge-golive::before, .badge-completed::before { background: var(--success); }
+
+  .badge-inprogress, .badge-installing {
+    background: var(--info-bg); color: var(--info);
+  }
+  .badge-inprogress::before, .badge-installing::before { background: var(--info); }
+
+  .badge-pending, .badge-waiting {
+    background: var(--warning-bg); color: var(--warning);
+  }
+  .badge-pending::before, .badge-waiting::before { background: var(--warning); }
+
+  .badge-cancelled, .badge-hold {
+    background: var(--danger-bg); color: var(--danger);
+  }
+  .badge-cancelled::before, .badge-hold::before { background: var(--danger); }
+
+  .badge-default {
+    background: var(--neutral-bg); color: var(--neutral);
+  }
+  .badge-default::before { background: var(--neutral); }
+
+  /* ── Phase tag ── */
+  .phase-tag {
+    display: inline-block;
+    background: var(--accent-light);
+    color: var(--accent-dark);
+    font-size: 11px; font-weight: 700;
+    padding: 2px 8px; border-radius: 4px;
+  }
+
+  /* ── Loading / Empty ── */
+  .loader-wrap {
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    padding: 60px 20px; gap: 14px;
+    color: var(--text-muted);
+  }
+  .spinner {
+    width: 32px; height: 32px;
+    border: 3px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .loader-wrap p { font-size: 13px; color: var(--text-muted); }
+
+  .empty-state {
+    text-align: center; padding: 60px 20px;
+    color: var(--text-muted);
+  }
+  .empty-state .empty-icon { font-size: 36px; margin-bottom: 12px; }
+  .empty-state p { font-size: 13px; }
+
+  /* ── Error ── */
+  .alert {
+    padding: 14px 18px; border-radius: var(--radius-sm);
+    font-size: 13px; margin-bottom: 16px;
+    display: flex; align-items: flex-start; gap: 10px;
+  }
+  .alert-danger { background: var(--danger-bg); color: var(--danger); border: 1px solid #fecaca; }
+  .alert-warning { background: var(--warning-bg); color: #92400e; border: 1px solid #fde68a; }
+
+  /* ── Config modal (first-time setup) ── */
+  .modal-overlay {
+    position: fixed; inset: 0;
+    background: rgba(28,25,23,0.5);
+    backdrop-filter: blur(4px);
+    z-index: 100;
+    display: flex; align-items: center; justify-content: center;
+    padding: 20px;
+  }
+  .modal-overlay.hidden { display: none; }
+  .modal {
+    background: var(--bg-surface);
+    border-radius: var(--radius-lg);
+    padding: 28px; max-width: 500px; width: 100%;
+    box-shadow: 0 20px 60px rgba(28,25,23,0.2);
+  }
+  .modal h2 { font-size: 18px; font-weight: 700; margin-bottom: 6px; }
+  .modal p { font-size: 13px; color: var(--text-secondary); margin-bottom: 20px; line-height: 1.6; }
+  .form-group { margin-bottom: 16px; }
+  .form-group label { display: block; font-size: 12px; font-weight: 700; color: var(--text-secondary); margin-bottom: 6px; }
+  .form-group input {
+    width: 100%; padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    font-size: 13px; font-family: 'Courier New', monospace;
+    background: var(--bg-base); color: var(--text-primary);
+    outline: none; transition: border-color 0.15s;
+  }
+  .form-group input:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(217,119,6,0.12);
+  }
+  .form-group .hint { font-size: 11px; color: var(--text-muted); margin-top: 5px; }
+
+  /* ── Login screen ── */
+  #login-screen {
+    position: fixed; inset: 0;
+    background: var(--bg-base);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 200; padding: 20px;
+  }
+  #login-screen.hidden { display: none; }
+  .login-card {
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 40px 36px;
+    max-width: 400px; width: 100%;
+    text-align: center;
+    box-shadow: var(--shadow-md);
+  }
+  .login-logo {
+    width: 52px; height: 52px;
+    background: var(--accent);
+    border-radius: 14px;
+    display: inline-flex; align-items: center; justify-content: center;
+    color: white; font-weight: 800; font-size: 22px;
+    margin-bottom: 20px;
+  }
+  .login-card h1 { font-size: 20px; font-weight: 700; margin-bottom: 6px; }
+  .login-card p { font-size: 13px; color: var(--text-secondary); margin-bottom: 28px; line-height: 1.6; }
+  .google-btn {
+    display: inline-flex; align-items: center; gap: 10px;
+    padding: 11px 22px; border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+    background: var(--bg-surface); color: var(--text-primary);
+    font-size: 14px; font-weight: 500;
+    cursor: pointer; transition: all 0.15s;
+    box-shadow: var(--shadow-sm);
+  }
+  .google-btn:hover { background: var(--bg-base); box-shadow: var(--shadow-md); }
+  .google-btn img { width: 18px; height: 18px; }
+  .login-footer { font-size: 11px; color: var(--text-muted); margin-top: 20px; }
+
+  /* ── Access denied ── */
+  #denied-screen {
+    position: fixed; inset: 0;
+    background: var(--bg-base);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 200; padding: 20px;
+  }
+  #denied-screen.hidden { display: none; }
+  .denied-card {
+    background: var(--bg-surface);
+    border: 1px solid #fecaca;
+    border-radius: var(--radius-lg);
+    padding: 40px 36px; max-width: 400px; width: 100%;
+    text-align: center; box-shadow: var(--shadow-md);
+  }
+  .denied-card .icon { font-size: 40px; margin-bottom: 16px; }
+  .denied-card h2 { font-size: 18px; font-weight: 700; color: var(--danger); margin-bottom: 8px; }
+  .denied-card p { font-size: 13px; color: var(--text-secondary); margin-bottom: 20px; line-height: 1.6; }
+  .denied-card .email-chip {
+    background: var(--danger-bg); color: var(--danger);
+    padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 600;
+    display: inline-block; margin-bottom: 20px;
+  }
+
+  /* ── User avatar in topbar ── */
+  .user-info {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 12.5px; color: var(--text-secondary);
+  }
+  .user-avatar {
+    width: 28px; height: 28px; border-radius: 50%;
+    border: 2px solid var(--border);
+    object-fit: cover;
+  }
+  .user-avatar-fallback {
+    width: 28px; height: 28px; border-radius: 50%;
+    background: var(--accent); color: white;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px; font-weight: 700;
+  }
+
+  /* ── Responsive ── */
+  @media (max-width: 900px) {
+    .sidebar { width: 56px; }
+    .sidebar-logo h2, .sidebar-logo p, .nav-item span, .sidebar-section-label { display: none; }
+    .sidebar-logo .logo-mark { margin: 0 auto; }
+    .nav-item { justify-content: center; padding: 10px 8px; }
+    .main { margin-left: 56px; }
+    .stats-grid { grid-template-columns: repeat(2, 1fr); }
+    .topbar { padding: 12px 16px; }
+    .page-body { padding: 16px; }
+  }
+  @media (max-width: 600px) {
+    .stats-grid { grid-template-columns: 1fr 1fr; }
+    .filter-bar input { width: 100%; }
+  }
+</style>
+</head>
+<body>
+
+<!-- Login screen -->
+<div id="login-screen">
+  <div class="login-card">
+    <div class="login-logo">N</div>
+    <h1>NHSO X-Ray Viewer</h1>
+    <p>ระบบติดตามการติดตั้ง X-Ray สกรีนวัณโรค<br>สำหรับผู้มีสิทธิ์เข้าถึงเท่านั้น</p>
+    <button class="google-btn" onclick="signIn()">
+      <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google" />
+      เข้าสู่ระบบด้วย Google
+    </button>
+    <div class="login-footer">เฉพาะ email ที่ได้รับอนุญาตเท่านั้น</div>
+  </div>
+</div>
+
+<!-- Access denied screen -->
+<div id="denied-screen" class="hidden">
+  <div class="denied-card">
+    <div class="icon">🚫</div>
+    <h2>ไม่มีสิทธิ์เข้าถึง</h2>
+    <div class="email-chip" id="denied-email"></div>
+    <p>Email นี้ไม่ได้รับอนุญาตให้เข้าถึงระบบ<br>กรุณาติดต่อผู้ดูแลระบบ</p>
+    <button class="btn btn-ghost" onclick="signOut()">ออกจากระบบ / เปลี่ยน Email</button>
+  </div>
+</div>
+
+<!-- First-time setup modal -->
+<div class="modal-overlay" id="setupModal">
+  <div class="modal">
+    <div style="font-size:28px; margin-bottom:12px;">⚙️</div>
+    <h2>ตั้งค่า Sheet ID</h2>
+    <p>ใส่ Google Spreadsheet ID ของ <strong>NHSO Viewer Data</strong> (Sheet ที่สร้างด้วย IMPORTRANGE) เพื่อให้หน้านี้โหลดข้อมูลได้ครับ</p>
+    <div class="form-group">
+      <label>SPREADSHEET ID</label>
+      <input type="text" id="sheetIdInput" placeholder="1ABC...xyz" />
+      <div class="hint">ดูได้จาก URL: docs.google.com/spreadsheets/d/<strong>[ID ตรงนี้]</strong>/edit</div>
+    </div>
+    <div class="form-group">
+      <label>SHEET NAME (ชื่อ tab)</label>
+      <input type="text" id="sheetNameInput" placeholder="Sheet1" value="Sheet1" />
+      <div class="hint">ชื่อ tab ของชีตที่มีข้อมูล IMPORTRANGE</div>
+    </div>
+    <div style="display:flex; gap:10px; margin-top:20px;">
+      <button class="btn btn-primary" style="flex:1" onclick="saveConfig()">บันทึกและโหลดข้อมูล</button>
+    </div>
+  </div>
+</div>
+
+<div class="layout">
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <div class="logo-mark">N</div>
+      <h2>NHSO X-Ray</h2>
+      <p>Viewer Dashboard</p>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-section-label">ภาพรวม</div>
+      <a class="nav-item active" onclick="showView('table')">
+        <span class="icon">📋</span><span>รายการโรงพยาบาล</span>
+      </a>
+      <a class="nav-item" onclick="showView('progress')">
+        <span class="icon">📊</span><span>สถิติและความคืบหน้า</span>
+      </a>
+    </div>
+
+    <div class="sidebar-section" style="margin-top:auto; border-top:1px solid var(--border); padding-top:12px;">
+      <a class="nav-item" onclick="openSettings()">
+        <span class="icon">⚙️</span><span>ตั้งค่า Sheet</span>
+      </a>
+    </div>
+  </aside>
+
+  <!-- Main -->
+  <div class="main">
+    <!-- Top bar -->
+    <div class="topbar">
+      <div class="topbar-title">
+        <h1 id="viewTitle">รายการโรงพยาบาล</h1>
+        <p id="viewSubtitle">ข้อมูลติดตามการติดตั้งระบบ X-Ray สกรีนวัณโรค</p>
+      </div>
+      <div class="topbar-actions">
+        <div class="last-update">
+          <div class="pulse" id="statusDot"></div>
+          <span id="lastUpdate">กำลังโหลด...</span>
+        </div>
+        <button class="btn btn-ghost" onclick="loadData()">↻ รีเฟรช</button>
+        <div class="user-info" id="user-info" style="display:none">
+          <div id="user-avatar-wrap"></div>
+          <span id="user-name"></span>
+          <button class="btn btn-ghost" style="padding:5px 10px;font-size:12px" onclick="signOut()">ออก</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Table view -->
+    <div id="view-table" class="page-body">
+      <!-- Stat cards -->
+      <div class="stats-grid">
+        <div class="stat-card accent-border">
+          <div class="stat-label"><div class="dot" style="background:var(--accent)"></div>ทั้งหมด</div>
+          <div class="stat-value" id="statTotal">—</div>
+          <div class="stat-sub">รายการโรงพยาบาล</div>
+        </div>
+        <div class="stat-card success-border">
+          <div class="stat-label"><div class="dot" style="background:var(--success)"></div>Go-Live แล้ว</div>
+          <div class="stat-value" id="statGolive">—</div>
+          <div class="stat-sub">ออนไลน์เรียบร้อย</div>
+        </div>
+        <div class="stat-card info-border">
+          <div class="stat-label"><div class="dot" style="background:var(--info)"></div>กำลังติดตั้ง</div>
+          <div class="stat-value" id="statInstalling">—</div>
+          <div class="stat-sub">อยู่ระหว่างดำเนินการ</div>
+        </div>
+        <div class="stat-card warning-border">
+          <div class="stat-label"><div class="dot" style="background:var(--warning)"></div>รอดำเนินการ</div>
+          <div class="stat-value" id="statPending">—</div>
+          <div class="stat-sub">ยังไม่เริ่ม</div>
+        </div>
+      </div>
+
+      <div id="error-banner" style="display:none"></div>
+
+      <!-- Filter bar -->
+      <div class="filter-bar">
+        <input type="text" id="searchInput" placeholder="🔍 ค้นหาชื่อโรงพยาบาล / จังหวัด" oninput="applyFilter()" />
+        <select id="filterPhase" onchange="applyFilter()">
+          <option value="">ทุก Phase</option>
+        </select>
+        <select id="filterStatus" onchange="applyFilter()">
+          <option value="">ทุกสถานะ</option>
+        </select>
+        <select id="filterZone" onchange="applyFilter()">
+          <option value="">ทุกเขต</option>
+        </select>
+        <span class="filter-count" id="filterCount"></span>
+      </div>
+
+      <!-- Table -->
+      <div class="section-header">
+        <div class="section-title">
+          รายการทั้งหมด
+          <span class="count-badge" id="tableCount">0</span>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <div id="table-loader" class="loader-wrap">
+          <div class="spinner"></div>
+          <p>กำลังโหลดข้อมูล...</p>
+        </div>
+        <div id="table-content" style="display:none">
+          <table>
+            <thead>
+              <tr id="tableHead"></tr>
+            </thead>
+            <tbody id="tableBody"></tbody>
+          </table>
+          <div id="empty-state" class="empty-state" style="display:none">
+            <div class="empty-icon">🔍</div>
+            <p>ไม่พบข้อมูลที่ตรงกับตัวกรองที่เลือก</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Progress view -->
+    <div id="view-progress" class="page-body" style="display:none">
+      <div class="stats-grid" style="grid-template-columns: repeat(2,1fr)">
+        <div class="stat-card accent-border" style="padding:22px;">
+          <div class="stat-label">ความคืบหน้าโดยรวม</div>
+          <div style="margin: 12px 0;">
+            <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text-muted);margin-bottom:6px;">
+              <span id="progressLabel">0 / 0 โรงพยาบาล</span>
+              <span id="progressPct">0%</span>
+            </div>
+            <div style="background:var(--border);border-radius:8px;height:10px;overflow:hidden;">
+              <div id="progressBar" style="height:100%;background:var(--accent);border-radius:8px;transition:width 0.8s ease;width:0%"></div>
+            </div>
+          </div>
+          <div class="stat-sub">จำนวนที่ Go-Live แล้ว</div>
+        </div>
+        <div class="stat-card success-border" style="padding:22px;">
+          <div class="stat-label">สถิติ Go-Live ตาม Phase</div>
+          <div id="phaseStats" style="margin-top:10px;display:flex;flex-direction:column;gap:8px;"></div>
+        </div>
+      </div>
+
+      <div class="section-header" style="margin-top:8px">
+        <div class="section-title">สถิติแยกตามเขตสุขภาพ</div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>เขตสุขภาพ</th>
+              <th>จำนวนทั้งหมด</th>
+              <th>Go-Live</th>
+              <th>กำลังติดตั้ง</th>
+              <th>รอดำเนินการ</th>
+              <th>ความคืบหน้า</th>
+            </tr>
+          </thead>
+          <tbody id="zoneStatsBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── Auth config ──────────────────────────────────────────────────
+// ⚙️ ใส่ Google OAuth Client ID ของคุณตรงนี้
+const GOOGLE_CLIENT_ID = '986692337910-cv8lvufhi9hp3iqu3dg41l2onmopkkkr.apps.googleusercontent.com';
+
+// ✅ Email ที่อนุญาตให้เข้าถึง
+const ALLOWED_EMAILS = [
+  'baspiopm45@gmail.com',
+  'nongkoi.nhso@gmail.com'
+];
+
+let currentUser = null;
+
+function signIn() {
+  const client = google.accounts.oauth2.initTokenClient({
+    client_id: GOOGLE_CLIENT_ID,
+    scope: 'email profile',
+    callback: (resp) => {
+      if (resp.error) { console.error(resp); return; }
+      fetchUserInfo(resp.access_token);
+    }
+  });
+  client.requestAccessToken();
+}
+
+async function fetchUserInfo(accessToken) {
+  try {
+    const res = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+      headers: { Authorization: `Bearer ${accessToken}` }
+    });
+    const user = await res.json();
+    handleUser(user, accessToken);
+  } catch (e) {
+    console.error('Failed to fetch user info', e);
+  }
+}
+
+function handleUser(user, token) {
+  const email = (user.email || '').toLowerCase().trim();
+  currentUser = { ...user, token };
+
+  if (!ALLOWED_EMAILS.map(e => e.toLowerCase()).includes(email)) {
+    document.getElementById('login-screen').classList.add('hidden');
+    document.getElementById('denied-email').textContent = email;
+    document.getElementById('denied-screen').classList.remove('hidden');
+    return;
+  }
+
+  // ✅ Allowed
+  document.getElementById('login-screen').classList.add('hidden');
+  document.getElementById('denied-screen').classList.add('hidden');
+
+  // Show user info in topbar
+  const avatarWrap = document.getElementById('user-avatar-wrap');
+  if (user.picture) {
+    avatarWrap.innerHTML = `<img class="user-avatar" src="${user.picture}" alt="" />`;
+  } else {
+    const initial = (user.given_name || email)[0].toUpperCase();
+    avatarWrap.innerHTML = `<div class="user-avatar-fallback">${initial}</div>`;
+  }
+  document.getElementById('user-name').textContent = user.given_name || email;
+  document.getElementById('user-info').style.display = 'flex';
+
+  loadData();
+}
+
+function signOut() {
+  if (currentUser?.token) {
+    google.accounts.oauth2.revoke(currentUser.token);
+  }
+  currentUser = null;
+  document.getElementById('user-info').style.display = 'none';
+  document.getElementById('denied-screen').classList.add('hidden');
+  document.getElementById('login-screen').classList.remove('hidden');
+}
+
+// ── Config ──────────────────────────────────────────────────────
+const CONFIG_KEY = 'nhso_viewer_config';
+// Default Sheet ID — NHSO Viewer Data (IMPORTRANGE, no PACS/Priority/Sales)
+const DEFAULT_SHEET_ID = '1HPCG5Vq4PlPPdHix42KiyGz6M4Cs-5PPBQoX8VuUzro';
+const DEFAULT_SHEET_NAME = 'Sheet1';
+
+let config = JSON.parse(localStorage.getItem(CONFIG_KEY) || 'null') || {
+  sheetId: DEFAULT_SHEET_ID,
+  sheetName: DEFAULT_SHEET_NAME
+};
+
+let allRows = [];
+let filteredRows = [];
+let headers = [];
+let COL = {};
+
+// ── Boot ────────────────────────────────────────────────────────
+window.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('sheetIdInput').value = config.sheetId || DEFAULT_SHEET_ID;
+  document.getElementById('sheetNameInput').value = config.sheetName || DEFAULT_SHEET_NAME;
+  document.getElementById('setupModal').classList.add('hidden');
+  // Show login screen — don't auto-load until user authenticates
+  // (login-screen is visible by default in HTML)
+});
+
+function saveConfig() {
+  const id = document.getElementById('sheetIdInput').value.trim();
+  const name = document.getElementById('sheetNameInput').value.trim() || 'Sheet1';
+  if (!id) { alert('กรุณาใส่ Sheet ID ก่อนครับ'); return; }
+  config = { sheetId: id, sheetName: name };
+  localStorage.setItem(CONFIG_KEY, JSON.stringify(config));
+  document.getElementById('setupModal').classList.add('hidden');
+  loadData();
+}
+
+function openSettings() {
+  document.getElementById('setupModal').classList.remove('hidden');
+}
+
+// ── Load data via gviz (no API key needed) ───────────────────────
+async function loadData() {
+  document.getElementById('table-loader').style.display = 'flex';
+  document.getElementById('table-content').style.display = 'none';
+  document.getElementById('lastUpdate').textContent = 'กำลังโหลด...';
+
+  const sheetParam = encodeURIComponent(config.sheetName || 'Sheet1');
+  const url = `https://docs.google.com/spreadsheets/d/${config.sheetId}/gviz/tq?tqx=out:json&sheet=${sheetParam}&headers=1`;
+
+  try {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const text = await res.text();
+
+    // Strip gviz wrapper: /*O_o*/\ngoogle.visualization.Query.setResponse({...});
+    const jsonStr = text.match(/google\.visualization\.Query\.setResponse\(([\s\S]*)\)/)?.[1];
+    if (!jsonStr) throw new Error('ไม่สามารถ parse ข้อมูลได้ — ตรวจสอบว่า Share เป็น "Anyone with the link"');
+
+    const gviz = JSON.parse(jsonStr);
+    if (gviz.status === 'error') throw new Error(gviz.errors?.[0]?.message || 'Gviz error');
+
+    const table = gviz.table;
+    if (!table || !table.cols || !table.rows) throw new Error('ไม่มีข้อมูลในชีต');
+
+    // Extract headers
+    headers = table.cols.map(c => c.label || c.id || '');
+
+    // Extract rows
+    allRows = table.rows
+      .map((r, i) => {
+        const obj = { _rowIndex: i + 2 };
+        headers.forEach((h, j) => {
+          const cell = r.c?.[j];
+          obj[h] = (cell?.f ?? cell?.v ?? '').toString();
+        });
+        return obj;
+      })
+      .filter(r => r[headers[0]] !== '' && r[headers[0]] !== 'null');
+
+    detectColumns(headers);
+    clearError();
+    buildFilters();
+    applyFilter();
+    updateStats();
+    updateProgressView();
+
+    const now = new Date();
+    document.getElementById('lastUpdate').textContent =
+      `อัปเดต ${now.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })}`;
+    document.getElementById('statusDot').style.background = 'var(--success)';
+
+  } catch (err) {
+    console.error(err);
+    showError(`โหลดข้อมูลไม่สำเร็จ: ${err.message}`);
+    document.getElementById('statusDot').style.background = 'var(--danger)';
+    document.getElementById('lastUpdate').textContent = 'โหลดไม่สำเร็จ';
+    document.getElementById('table-loader').style.display = 'none';
+    document.getElementById('table-content').style.display = 'block';
+  }
+}
+
+// ── Auto-detect columns ──────────────────────────────────────────
+function detectColumns(hdrs) {
+  COL = {};
+  hdrs.forEach((h, i) => {
+    const lower = h.toLowerCase();
+    if (lower.includes('ชื่อ') || lower.includes('หน่วยบริการ')) COL.name = h;
+    else if (lower.includes('phase')) COL.phase = h;
+    else if (lower.includes('สถานะ') || lower.includes('status') || lower.includes('implement')) COL.status = h;
+    else if (lower.includes('จังหวัด')) COL.province = h;
+    else if (lower.includes('เขต') || lower.includes('zone')) COL.zone = h;
+    else if (lower.includes('ประเภท') || lower.includes('type')) COL.type = h;
+    else if (lower.includes('สังกัด')) COL.org = h;
+    else if (lower.includes('golive') || lower.includes('go live') || lower.includes('go-live')) COL.golive = h;
+    else if (lower.includes('ระดับ') || lower.includes('level')) COL.level = h;
+    else if (lower.includes('hcode') || lower.includes('รหัส')) COL.hcode = h;
+  });
+}
+
+// ── Build filter dropdowns ───────────────────────────────────────
+function buildFilters() {
+  populateSelect('filterPhase', COL.phase, 'ทุก Phase');
+  populateSelect('filterStatus', COL.status, 'ทุกสถานะ');
+  populateSelect('filterZone', COL.zone, 'ทุกเขต');
+}
+
+function populateSelect(selectId, colName, placeholder) {
+  const sel = document.getElementById(selectId);
+  const first = sel.options[0];
+  sel.innerHTML = '';
+  sel.appendChild(first);
+  if (!colName) return;
+  const vals = [...new Set(allRows.map(r => r[colName]).filter(Boolean))].sort();
+  vals.forEach(v => {
+    const opt = document.createElement('option');
+    opt.value = v; opt.textContent = v;
+    sel.appendChild(opt);
+  });
+}
+
+// ── Filter + render ──────────────────────────────────────────────
+function applyFilter() {
+  const search = document.getElementById('searchInput').value.toLowerCase();
+  const phase = document.getElementById('filterPhase').value;
+  const status = document.getElementById('filterStatus').value;
+  const zone = document.getElementById('filterZone').value;
+
+  filteredRows = allRows.filter(r => {
+    const nameMatch = !search ||
+      (r[COL.name] || '').toLowerCase().includes(search) ||
+      (r[COL.province] || '').toLowerCase().includes(search);
+    const phaseMatch = !phase || r[COL.phase] === phase;
+    const statusMatch = !status || r[COL.status] === status;
+    const zoneMatch = !zone || r[COL.zone] === zone;
+    return nameMatch && phaseMatch && statusMatch && zoneMatch;
+  });
+
+  renderTable();
+  document.getElementById('filterCount').textContent =
+    filteredRows.length < allRows.length
+      ? `แสดง ${filteredRows.length} จาก ${allRows.length} รายการ`
+      : '';
+  document.getElementById('tableCount').textContent = filteredRows.length;
+}
+
+// ── Render table ─────────────────────────────────────────────────
+function renderTable() {
+  document.getElementById('table-loader').style.display = 'none';
+  document.getElementById('table-content').style.display = 'block';
+
+  // Decide which columns to show (exclude sensitive if needed)
+  const hideCols = ['PACS','Priority Group','Sales','ผู้ให้ข้อมูล','เบอร์','email',
+    'วันที่เริ่ม','วันที่สิ้นสุด','Sales Doc','Contract Doc','Paid','ใบตอบรับ'];
+  const showHeaders = headers.filter(h => !hideCols.some(hide => h.includes(hide)));
+
+  // Build header
+  const thead = document.getElementById('tableHead');
+  thead.innerHTML = showHeaders.map(h => `<th>${h}</th>`).join('');
+
+  // Build body
+  const tbody = document.getElementById('tableBody');
+  if (filteredRows.length === 0) {
+    tbody.innerHTML = '';
+    document.getElementById('empty-state').style.display = 'block';
+    return;
+  }
+  document.getElementById('empty-state').style.display = 'none';
+
+  tbody.innerHTML = filteredRows.map(row => {
+    const cells = showHeaders.map(h => {
+      const val = row[h] || '';
+      if (h === COL.status) return `<td>${renderStatus(val)}</td>`;
+      if (h === COL.phase) return `<td><span class="phase-tag">${val}</span></td>`;
+      if (h === COL.name) return `<td style="font-weight:600;max-width:220px">${val}</td>`;
+      return `<td>${val}</td>`;
+    }).join('');
+    return `<tr>${cells}</tr>`;
+  }).join('');
+}
+
+function renderStatus(val) {
+  if (!val) return `<span class="badge badge-default">—</span>`;
+  const lower = val.toLowerCase();
+  let cls = 'badge-default';
+  if (lower.includes('golive') || lower.includes('go live') || lower.includes('เสร็จ') || lower.includes('ติดตั้งแล้ว')) cls = 'badge-golive';
+  else if (lower.includes('ติดตั้ง') || lower.includes('install') || lower.includes('inprogress') || lower.includes('progress')) cls = 'badge-inprogress';
+  else if (lower.includes('รอ') || lower.includes('wait') || lower.includes('pending')) cls = 'badge-pending';
+  else if (lower.includes('ยกเลิก') || lower.includes('cancel') || lower.includes('hold')) cls = 'badge-cancelled';
+  return `<span class="badge ${cls}">${val}</span>`;
+}
+
+// ── Stats ────────────────────────────────────────────────────────
+function updateStats() {
+  const total = allRows.length;
+  let golive = 0, installing = 0, pending = 0;
+
+  allRows.forEach(r => {
+    const s = (r[COL.status] || '').toLowerCase();
+    if (s.includes('golive') || s.includes('go live') || s.includes('เสร็จ') || s.includes('ติดตั้งแล้ว')) golive++;
+    else if (s.includes('ติดตั้ง') || s.includes('install') || s.includes('progress')) installing++;
+    else pending++;
+  });
+
+  document.getElementById('statTotal').textContent = total;
+  document.getElementById('statGolive').textContent = golive;
+  document.getElementById('statInstalling').textContent = installing;
+  document.getElementById('statPending').textContent = pending;
+}
+
+function updateProgressView() {
+  const total = allRows.length;
+  if (!total) return;
+
+  let golive = allRows.filter(r => {
+    const s = (r[COL.status] || '').toLowerCase();
+    return s.includes('golive') || s.includes('go live') || s.includes('เสร็จ') || s.includes('ติดตั้งแล้ว');
+  }).length;
+
+  const pct = Math.round(golive / total * 100);
+  document.getElementById('progressLabel').textContent = `${golive} / ${total} โรงพยาบาล`;
+  document.getElementById('progressPct').textContent = `${pct}%`;
+  setTimeout(() => document.getElementById('progressBar').style.width = pct + '%', 100);
+
+  // Phase stats
+  if (COL.phase) {
+    const phases = [...new Set(allRows.map(r => r[COL.phase]).filter(Boolean))].sort();
+    const phaseContainer = document.getElementById('phaseStats');
+    phaseContainer.innerHTML = phases.map(p => {
+      const pRows = allRows.filter(r => r[COL.phase] === p);
+      const pGolive = pRows.filter(r => {
+        const s = (r[COL.status] || '').toLowerCase();
+        return s.includes('golive') || s.includes('go live') || s.includes('เสร็จ') || s.includes('ติดตั้งแล้ว');
+      }).length;
+      const pPct = Math.round(pGolive / pRows.length * 100);
+      return `
+        <div>
+          <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px;">
+            <span style="font-weight:600">${p}</span>
+            <span style="color:var(--text-muted)">${pGolive}/${pRows.length} (${pPct}%)</span>
+          </div>
+          <div style="background:var(--border);border-radius:4px;height:6px;overflow:hidden;">
+            <div style="height:100%;background:var(--success);border-radius:4px;width:${pPct}%"></div>
+          </div>
+        </div>`;
+    }).join('');
+  }
+
+  // Zone stats
+  if (COL.zone) {
+    const zones = [...new Set(allRows.map(r => r[COL.zone]).filter(Boolean))].sort();
+    const zoneBody = document.getElementById('zoneStatsBody');
+    zoneBody.innerHTML = zones.map(z => {
+      const zRows = allRows.filter(r => r[COL.zone] === z);
+      const zGolive = zRows.filter(r => {
+        const s = (r[COL.status] || '').toLowerCase();
+        return s.includes('golive') || s.includes('go live') || s.includes('เสร็จ') || s.includes('ติดตั้งแล้ว');
+      }).length;
+      const zInstall = zRows.filter(r => {
+        const s = (r[COL.status] || '').toLowerCase();
+        return s.includes('ติดตั้ง') || s.includes('install') || s.includes('progress');
+      }).length;
+      const zPending = zRows.length - zGolive - zInstall;
+      const zPct = Math.round(zGolive / zRows.length * 100);
+      return `<tr>
+        <td style="font-weight:600">${z}</td>
+        <td>${zRows.length}</td>
+        <td><span style="color:var(--success);font-weight:600">${zGolive}</span></td>
+        <td><span style="color:var(--info)">${zInstall}</span></td>
+        <td><span style="color:var(--warning)">${zPending}</span></td>
+        <td>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <div style="flex:1;background:var(--border);border-radius:4px;height:6px;overflow:hidden;">
+              <div style="height:100%;background:var(--success);border-radius:4px;width:${zPct}%"></div>
+            </div>
+            <span style="font-size:11px;color:var(--text-muted);width:30px;text-align:right">${zPct}%</span>
+          </div>
+        </td>
+      </tr>`;
+    }).join('');
+  }
+}
+
+// ── Navigation ───────────────────────────────────────────────────
+function showView(name) {
+  ['table', 'progress'].forEach(v => {
+    document.getElementById(`view-${v}`).style.display = 'none';
+  });
+  document.getElementById(`view-${name}`).style.display = 'block';
+
+  document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+  event.currentTarget.classList.add('active');
+
+  const titles = {
+    table: ['รายการโรงพยาบาล', 'ข้อมูลติดตามการติดตั้งระบบ X-Ray สกรีนวัณโรค'],
+    progress: ['สถิติและความคืบหน้า', 'ภาพรวมการดำเนินงานแยกตาม Phase และเขต'],
+  };
+  document.getElementById('viewTitle').textContent = titles[name][0];
+  document.getElementById('viewSubtitle').textContent = titles[name][1];
+}
+
+// ── Error helpers ────────────────────────────────────────────────
+function showError(msg) {
+  const el = document.getElementById('error-banner');
+  el.style.display = 'flex';
+  el.innerHTML = `<div class="alert alert-danger">⚠️ ${msg}</div>`;
+  document.getElementById('table-loader').style.display = 'none';
+  document.getElementById('table-content').style.display = 'block';
+}
+
+function clearError() {
+  document.getElementById('error-banner').style.display = 'none';
+}
+</script>
+</body>
+</html>
