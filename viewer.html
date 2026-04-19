@@ -988,15 +988,20 @@ function renderTable() {
   }).join('');
 }
 
-function renderStatus(val) {
-  if (!val) return `<span class="badge badge-default">—</span>`;
+function getStatusClass(val) {
+  if (!val || val === '-') return 'badge-default';
   const lower = val.toLowerCase();
-  let cls = 'badge-default';
-  if (lower.includes('golive') || lower.includes('go live') || lower.includes('เสร็จ') || lower.includes('ติดตั้งแล้ว')) cls = 'badge-golive';
-  else if (lower.includes('ติดตั้ง') || lower.includes('install') || lower.includes('inprogress') || lower.includes('progress')) cls = 'badge-inprogress';
-  else if (lower.includes('รอ') || lower.includes('wait') || lower.includes('pending')) cls = 'badge-pending';
-  else if (lower.includes('ยกเลิก') || lower.includes('cancel') || lower.includes('hold')) cls = 'badge-cancelled';
-  return `<span class="badge ${cls}">${val}</span>`;
+  if (lower === 'lived' || lower.includes('golive') || lower.includes('go live') || lower.includes('go-live')) return 'badge-golive';
+  if (lower.includes('ready for training') || lower.includes('waiting') || lower.includes('in process') ||
+      lower.includes('transit') || lower.includes('sending') || lower.includes('install') ||
+      lower.includes('progress') || lower.includes('config')) return 'badge-inprogress';
+  if (lower.includes('cancel') || lower.includes('hold') || lower.includes('ยกเลิก')) return 'badge-cancelled';
+  return 'badge-default';
+}
+
+function renderStatus(val) {
+  if (!val || val === '-') return `<span class="badge badge-default">—</span>`;
+  return `<span class="badge ${getStatusClass(val)}">${val}</span>`;
 }
 
 // ── Stats ────────────────────────────────────────────────────────
@@ -1005,9 +1010,9 @@ function updateStats() {
   let golive = 0, installing = 0, pending = 0;
 
   allRows.forEach(r => {
-    const s = (r[COL.status] || '').toLowerCase();
-    if (s.includes('golive') || s.includes('go live') || s.includes('เสร็จ') || s.includes('ติดตั้งแล้ว')) golive++;
-    else if (s.includes('ติดตั้ง') || s.includes('install') || s.includes('progress')) installing++;
+    const cls = getStatusClass(r[COL.status] || '');
+    if (cls === 'badge-golive') golive++;
+    else if (cls === 'badge-inprogress') installing++;
     else pending++;
   });
 
@@ -1021,10 +1026,7 @@ function updateProgressView() {
   const total = allRows.length;
   if (!total) return;
 
-  let golive = allRows.filter(r => {
-    const s = (r[COL.status] || '').toLowerCase();
-    return s.includes('golive') || s.includes('go live') || s.includes('เสร็จ') || s.includes('ติดตั้งแล้ว');
-  }).length;
+  let golive = allRows.filter(r => getStatusClass(r[COL.status] || '') === 'badge-golive').length;
 
   const pct = Math.round(golive / total * 100);
   document.getElementById('progressLabel').textContent = `${golive} / ${total} โรงพยาบาล`;
@@ -1037,10 +1039,7 @@ function updateProgressView() {
     const phaseContainer = document.getElementById('phaseStats');
     phaseContainer.innerHTML = phases.map(p => {
       const pRows = allRows.filter(r => r[COL.phase] === p);
-      const pGolive = pRows.filter(r => {
-        const s = (r[COL.status] || '').toLowerCase();
-        return s.includes('golive') || s.includes('go live') || s.includes('เสร็จ') || s.includes('ติดตั้งแล้ว');
-      }).length;
+      const pGolive = pRows.filter(r => getStatusClass(r[COL.status] || '') === 'badge-golive').length;
       const pPct = Math.round(pGolive / pRows.length * 100);
       return `
         <div>
@@ -1061,14 +1060,8 @@ function updateProgressView() {
     const zoneBody = document.getElementById('zoneStatsBody');
     zoneBody.innerHTML = zones.map(z => {
       const zRows = allRows.filter(r => r[COL.zone] === z);
-      const zGolive = zRows.filter(r => {
-        const s = (r[COL.status] || '').toLowerCase();
-        return s.includes('golive') || s.includes('go live') || s.includes('เสร็จ') || s.includes('ติดตั้งแล้ว');
-      }).length;
-      const zInstall = zRows.filter(r => {
-        const s = (r[COL.status] || '').toLowerCase();
-        return s.includes('ติดตั้ง') || s.includes('install') || s.includes('progress');
-      }).length;
+      const zGolive = zRows.filter(r => getStatusClass(r[COL.status] || '') === 'badge-golive').length;
+      const zInstall = zRows.filter(r => getStatusClass(r[COL.status] || '') === 'badge-inprogress').length;
       const zPending = zRows.length - zGolive - zInstall;
       const zPct = Math.round(zGolive / zRows.length * 100);
       return `<tr>
