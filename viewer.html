@@ -836,8 +836,10 @@ async function loadData() {
   const url = `https://docs.google.com/spreadsheets/d/${config.sheetId}/gviz/tq?tqx=out:json&sheet=${sheetParam}&headers=1`;
 
   try {
-    const res = await fetch(url);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const res = await fetch(url, { mode: 'cors' }).catch(() => {
+      throw new Error('CORS error — เปิดจาก GitHub Pages (https://...) แทนการเปิด file:// ในเครื่อง หรือตรวจสอบว่า Share Sheet เป็น "Anyone with the link" แล้ว');
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status} — ตรวจสอบว่า Share Sheet เป็น "Anyone with the link → Viewer"`);
     const text = await res.text();
 
     // Strip gviz wrapper: /*O_o*/\ngoogle.visualization.Query.setResponse({...});
