@@ -370,7 +370,7 @@
     }
 
     .stacked-bar-wrap {
-      height: 24px;
+      height: 28px;
       background: #F0EBE3;
       border-radius: 6px;
       overflow: hidden;
@@ -381,11 +381,24 @@
       height: 100%;
       transition: width 0.4s ease;
       position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+
+    .seg-num {
+      font-size: 11px;
+      font-weight: 700;
+      color: white;
+      white-space: nowrap;
+      text-shadow: 0 1px 2px rgba(0,0,0,0.3);
+      pointer-events: none;
     }
 
     .seg-lived    { background: #16A34A; }
     .seg-progress { background: #F59E0B; }
-    .seg-waiting  { background: #FCA5A5; }
+    .seg-waiting  { background: #FC8181; }
 
     .zone-total {
       font-size: 12px;
@@ -812,7 +825,9 @@ function handleLogout() {
 /* ── Data Loading ── */
 async function loadData() {
   try {
-    const url = `https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.SPREADSHEET_ID}/values/${encodeURIComponent(CONFIG.SHEET_NAME + '!A1:X2000')}?valueRenderOption=FORMATTED_VALUE`;
+    const VIEWER_SHEET_ID   = '1HPCG5Vq4PlPPdHix42KiyGz6M4Cs-5PPBQoX8VuUzro';
+    const VIEWER_SHEET_NAME = 'Sheet1';
+    const url = `https://sheets.googleapis.com/v4/spreadsheets/${VIEWER_SHEET_ID}/values/${encodeURIComponent(VIEWER_SHEET_NAME + '!A1:X2000')}?valueRenderOption=FORMATTED_VALUE`;
     const res = await fetch(url, { headers: { Authorization: `Bearer ${VSTATE.accessToken}` } });
     if (!res.ok) throw new Error('Sheets API error');
     const data = await res.json();
@@ -967,13 +982,19 @@ function renderZoneChart(rows, isLived, isProgress, isWaiting) {
     const livedPct    = (d.lived    / d.total * 100).toFixed(1);
     const progressPct = (d.progress / d.total * 100).toFixed(1);
     const waitingPct  = (d.waiting  / d.total * 100).toFixed(1);
+
+    // แสดงตัวเลขเฉพาะ segment ที่กว้างพอ (>= 8%)
+    const livedNum    = parseFloat(livedPct)    >= 8 ? `<span class="seg-num">${d.lived}</span>`    : '';
+    const progressNum = parseFloat(progressPct) >= 8 ? `<span class="seg-num">${d.progress}</span>` : '';
+    const waitingNum  = parseFloat(waitingPct)  >= 8 ? `<span class="seg-num">${d.waiting}</span>`  : '';
+
     return `
       <div class="stacked-row">
         <div class="zone-label">เขต ${z}</div>
         <div class="stacked-bar-wrap" title="Golive: ${d.lived} | กำลังดำเนินการ: ${d.progress} | ยังไม่เริ่ม: ${d.waiting}">
-          <div class="stacked-seg seg-lived"    style="width:${livedPct}%"></div>
-          <div class="stacked-seg seg-progress" style="width:${progressPct}%"></div>
-          <div class="stacked-seg seg-waiting"  style="width:${waitingPct}%"></div>
+          <div class="stacked-seg seg-waiting"  style="width:${waitingPct}%">${waitingNum}</div>
+          <div class="stacked-seg seg-progress" style="width:${progressPct}%">${progressNum}</div>
+          <div class="stacked-seg seg-lived"    style="width:${livedPct}%">${livedNum}</div>
         </div>
         <div class="zone-total">${d.total}</div>
       </div>
