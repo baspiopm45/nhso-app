@@ -633,15 +633,16 @@ function renderZoneChart(rows,isLived,isProgress,isWaiting) {
   const sorted=Object.entries(zones).sort((a,b)=>parseFloat(a[0])-parseFloat(b[0]));
   document.getElementById('chart-zone').innerHTML=sorted.map(([z,d])=>{
     const lp=(d.lived/d.total*100).toFixed(1), pp=(d.progress/d.total*100).toFixed(1), wp=(d.waiting/d.total*100).toFixed(1);
-    const ln=parseFloat(lp)>=8?`<span class="seg-num">${d.lived}</span>`:'';
-    const pn=parseFloat(pp)>=8?`<span class="seg-num">${d.progress}</span>`:'';
-    const wn=parseFloat(wp)>=8?`<span class="seg-num">${d.waiting}</span>`:'';
+    const segLabel=(n,pct)=>n>0?(parseFloat(pct)>=5?`<span class="seg-num">${n}</span>`:`<span class="seg-num" style="font-size:9px">${n}</span>`):'';
+    const ln=parseFloat(lp)>0?segLabel(d.lived,lp):'';
+    const pn=parseFloat(pp)>0?segLabel(d.progress,pp):'';
+    const wn=parseFloat(wp)>0?segLabel(d.waiting,wp):'';
     return `<div class="stacked-row" onclick="drillZone('${z}')" title="คลิกเพื่อดูรายชื่อ รพ. เขต ${z}">
       <div class="zone-label">เขต ${z}</div>
       <div class="stacked-bar-wrap">
-        <div class="stacked-seg seg-waiting" style="width:${wp}%">${wn}</div>
-        <div class="stacked-seg seg-progress" style="width:${pp}%">${pn}</div>
-        <div class="stacked-seg seg-lived" style="width:${lp}%">${ln}</div>
+        <div class="stacked-seg seg-waiting" style="width:${wp}%;min-width:${parseFloat(wp)>0?'18px':'0'}">${wn}</div>
+        <div class="stacked-seg seg-progress" style="width:${pp}%;min-width:${parseFloat(pp)>0?'18px':'0'}">${pn}</div>
+        <div class="stacked-seg seg-lived" style="width:${lp}%;min-width:${parseFloat(lp)>0?'18px':'0'}">${ln}</div>
       </div>
       <div class="zone-total">${d.total}</div>
     </div>`;
