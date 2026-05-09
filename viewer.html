@@ -749,11 +749,25 @@ function renderTable() {
 function renderPagination(total) {
   const pages=Math.ceil(total/VS.pageSize);
   if(pages<=1){document.getElementById('pagination').innerHTML='';return;}
+  const cur=VS.page;
   let html='';
-  for(let i=1;i<=Math.min(pages,7);i++) {
-    html+=`<button class="pg-btn${i===VS.page?' active':''}" onclick="goPage(${i})">${i}</button>`;
+  // Prev
+  html+=`<button class="pg-btn" onclick="goPage(${cur-1})" ${cur===1?'disabled style="opacity:0.35;cursor:default"':''}>‹</button>`;
+  // First page always
+  html+=`<button class="pg-btn${cur===1?' active':''}" onclick="goPage(1)">1</button>`;
+  // Left ellipsis
+  if(cur>4) html+=`<span style="padding:4px 3px;color:var(--text-muted);font-size:12px">…</span>`;
+  // Window around current
+  const start=Math.max(2,cur-2), end=Math.min(pages-1,cur+2);
+  for(let i=start;i<=end;i++){
+    html+=`<button class="pg-btn${i===cur?' active':''}" onclick="goPage(${i})">${i}</button>`;
   }
-  if(pages>7) html+=`<span style="padding:4px 6px;color:var(--text-muted)">... ${pages}</span>`;
+  // Right ellipsis
+  if(cur<pages-3) html+=`<span style="padding:4px 3px;color:var(--text-muted);font-size:12px">…</span>`;
+  // Last page always
+  if(pages>1) html+=`<button class="pg-btn${cur===pages?' active':''}" onclick="goPage(${pages})">${pages}</button>`;
+  // Next
+  html+=`<button class="pg-btn" onclick="goPage(${cur+1})" ${cur===pages?'disabled style="opacity:0.35;cursor:default"':''}>›</button>`;
   document.getElementById('pagination').innerHTML=html;
 }
 
