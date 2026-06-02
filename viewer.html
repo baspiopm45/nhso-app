@@ -570,9 +570,13 @@ async function loadData() {
 /* ── DASHBOARD ── */
 function renderDashboard() {
   const rows=VS.rows;
+  // Status classification — mirror admin app (app.js renderDashboard) so viewer counts match exactly.
+  // กำลังดำเนินการ (progress) = เครื่องอยู่ระหว่างจัดส่ง/ติดตั้ง; รอดำเนินการ (waiting) = สถานะที่เหลือที่ยังไม่ Golive.
+  const PROGRESS_STATUSES=['Machine in Transit','In process config network with IT','Ready for Training'];
+  const WAITING_STATUSES=['Waiting for Integrate with PACS','Waiting for Swaping','Ready for Sending Waiting for address','-',''];
   const isLived=r=>vcGet(r,'STATUS')==='Lived';
-  const isProgress=r=>{const s=vcGet(r,'STATUS');return s&&s!=='-'&&s!=='Lived';};
-  const isWaiting=r=>{const s=vcGet(r,'STATUS');return !s||s==='-';};
+  const isProgress=r=>PROGRESS_STATUSES.includes(vcGet(r,'STATUS'));
+  const isWaiting=r=>WAITING_STATUSES.includes(vcGet(r,'STATUS'));
   const total=rows.length, lived=rows.filter(isLived).length, progress=rows.filter(isProgress).length, waiting=rows.filter(isWaiting).length;
   document.getElementById('stat-total').textContent=total.toLocaleString();
   document.getElementById('stat-lived').textContent=lived.toLocaleString();

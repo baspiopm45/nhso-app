@@ -54,14 +54,15 @@ VIEWER_SHEET_NAME: 'Sheet1'
 - **รายการโรงพยาบาล**: search, filter (Phase/Status/Zone), pagination (‹ 1 … n ›), eye button ดูรายละเอียด
 - **No edit button** — viewer อ่านได้อย่างเดียว
 
-## Status Classification Logic (viewer.html)
+## Status Classification Logic (sync แล้ว — viewer.html == index.html/app.js)
 ```js
 isLived    = STATUS === 'Lived'
-isProgress = STATUS มีค่า AND !== '-' AND !== 'Lived'
-isWaiting  = STATUS ว่าง OR === '-'
+isProgress = STATUS ∈ ['Machine in Transit','In process config network with IT','Ready for Training']
+isWaiting  = STATUS ∈ ['Waiting for Integrate with PACS','Waiting for Swaping',
+                       'Ready for Sending Waiting for address','-','']
 ```
-⚠️ Logic นี้ให้ผล กำลังดำเนินการ=69, รอดำเนินการ=180 ซึ่งต่างจาก admin app (40/209)
-→ ต้องตรวจสอบ logic ใน index.html แล้ว sync ให้ตรงกัน
+✅ viewer.html ใช้ status list เดียวกับ admin (app.js renderDashboard) แล้ว → ผลตรงกัน: กำลังดำเนินการ=40, รอดำเนินการ=209
+(เดิม viewer ใช้ catch-all `s && s!=='-' && s!=='Lived'` → ได้ 69/180 ซึ่งเพี้ยน)
 
 ## Column Mapping (CONFIG.COLUMNS)
 Main sheet columns ที่สำคัญ:
@@ -71,7 +72,7 @@ Main sheet columns ที่สำคัญ:
 - HCODE, TYPE, AFFILIATION, DELIVERY_ACK
 
 ## Known Issues / TODO
-- [ ] Sync status classification logic ระหว่าง viewer.html และ index.html
+- [x] Sync status classification logic ระหว่าง viewer.html และ index.html (ใช้ status list เดียวกับ app.js แล้ว)
 - [ ] Pagination ของ viewer.html แก้แล้ว (คลิก page สุดท้ายได้)
 - [ ] Zone chart แสดงตัวเลขทุก segment แม้เล็ก (ใช้ min-width + font ย่อ)
 
