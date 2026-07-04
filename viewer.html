@@ -72,6 +72,7 @@
     .stat-icon.green  { background:rgba(22,163,74,0.10); }
     .stat-icon.yellow { background:rgba(202,138,4,0.10); }
     .stat-icon.red    { background:rgba(220,38,38,0.10); }
+    .stat-icon.indigo { background:rgba(99,102,241,0.12); }
     .stat-info .value { font-size:26px; font-weight:800; line-height:1; }
     .stat-info .label { font-size:12px; color:var(--text-muted); margin-top:4px; }
 
@@ -146,6 +147,7 @@
     .badge-waiting  { background:#F3F4F6; color:#6B7280; }
     .badge-transit  { background:#EDE9FE; color:#5B21B6; }
     .badge-config   { background:#E0F2FE; color:#0369A1; }
+    .badge-contract { background:#E0E7FF; color:#3730A3; }
 
     /* TABLE FOOTER */
     .table-footer { display:flex; align-items:center; justify-content:space-between; padding:12px 16px; border-top:1px solid var(--border); font-size:12px; color:var(--text-muted); background:#FAF7F4; }
@@ -326,6 +328,7 @@
         <div class="stat-card"><div class="stat-icon orange">🏥</div><div class="stat-info"><div class="value" id="stat-total">—</div><div class="label">รพ. ทั้งหมด</div></div></div>
         <div class="stat-card"><div class="stat-icon green">✅</div><div class="stat-info"><div class="value" id="stat-lived">—</div><div class="label">Golive แล้ว</div></div></div>
         <div class="stat-card"><div class="stat-icon yellow">🚚</div><div class="stat-info"><div class="value" id="stat-progress">—</div><div class="label">กำลังดำเนินการ</div></div></div>
+        <div class="stat-card"><div class="stat-icon indigo">📝</div><div class="stat-info"><div class="value" id="stat-contract">—</div><div class="label">อยู่ระหว่างทำสัญญา</div></div></div>
         <div class="stat-card"><div class="stat-icon red">⏳</div><div class="stat-info"><div class="value" id="stat-waiting">—</div><div class="label">รอดำเนินการ</div></div></div>
       </div>
       <div class="charts-grid" style="margin-bottom:20px;">
@@ -345,7 +348,7 @@
         </div>
         <div class="legend">
           <div class="legend-item"><div class="legend-dot" style="background:#FC8181"></div> ยังไม่เริ่ม / รอ</div>
-          <div class="legend-item"><div class="legend-dot" style="background:#F59E0B"></div> กำลังดำเนินการ</div>
+          <div class="legend-item"><div class="legend-dot" style="background:#F59E0B"></div> กำลังดำเนินการ / ทำสัญญา</div>
           <div class="legend-item"><div class="legend-dot" style="background:#16A34A"></div> Golive แล้ว</div>
         </div>
         <div class="stacked-chart" id="chart-zone"><div class="loading-wrap"><div class="spinner"></div></div></div>
@@ -376,13 +379,6 @@
         </select>
         <select class="filter-select" id="filter-status">
           <option value="">ทุกสถานะ</option>
-          <option value="Lived">Lived</option>
-          <option value="Ready for Training">Ready for Training</option>
-          <option value="Machine in Transit">Machine in Transit</option>
-          <option value="In process config network with IT">In process config</option>
-          <option value="Waiting for Integrate with PACS">Waiting for PACS</option>
-          <option value="Waiting for Swaping">Waiting for Swaping</option>
-          <option value="-">-</option>
         </select>
         <select class="filter-select" id="filter-zone">
           <option value="">ทุกเขต</option>
@@ -463,6 +459,14 @@ function vcBuildColIndex() {
   });
 }
 function vcGet(row,key) { return (row && VC[key]!==undefined) ? (row[VC[key]]??'') : ''; }
+function vcTruthy(v) { const s=String(v).toLowerCase(); return s==='true'||s==='yes'||s==='1'; }
+// สถานะแสดงผล: ยังไม่มี Implement Status จริง แต่ Sales Doc=TRUE → "Contract in progress"
+function vcDisplayStatus(r) {
+  const s=vcGet(r,'STATUS');
+  if(s&&s!=='-') return s;
+  if(vcTruthy(vcGet(r,'SALES_DOC'))) return 'Contract in progress';
+  return s;
+}
 
 function toast(msg,type='info') {
   const icons={info:'ℹ️',success:'✅',error:'❌',warning:'⚠️'};
@@ -564,31 +568,33 @@ async function loadData() {
     document.getElementById('last-updated').textContent=`อัปเดต: ${now.toLocaleString('th-TH',{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'})}`;
     renderDashboard();
     populateZoneFilter();
+    populateStatusFilter();
   } catch(err) { toast('โหลดข้อมูลล้มเหลว: '+err.message,'error'); document.getElementById('last-updated').textContent='โหลดไม่สำเร็จ'; }
 }
 
 /* ── DASHBOARD ── */
 function renderDashboard() {
   const rows=VS.rows;
-  // Status classification — mirror admin app (app.js renderDashboard) so viewer counts match exactly.
-  // กำลังดำเนินการ (progress) = เครื่องอยู่ระหว่างจัดส่ง/ติดตั้ง; รอดำเนินการ (waiting) = สถานะที่เหลือที่ยังไม่ Golive.
+  // Status classification — mirror admin app (app.js) so viewer counts match exactly.
   const PROGRESS_STATUSES=['Machine in Transit','In process config network with IT','Ready for Training'];
   const WAITING_STATUSES=['Waiting for Integrate with PACS','Waiting for Swaping','Ready for Sending Waiting for address','-',''];
   const isLived=r=>vcGet(r,'STATUS')==='Lived';
   const isProgress=r=>PROGRESS_STATUSES.includes(vcGet(r,'STATUS'));
-  const isWaiting=r=>WAITING_STATUSES.includes(vcGet(r,'STATUS'));
-  const total=rows.length, lived=rows.filter(isLived).length, progress=rows.filter(isProgress).length, waiting=rows.filter(isWaiting).length;
+  const isContract=r=>{const s=vcGet(r,'STATUS');return (!s||s==='-')&&vcTruthy(vcGet(r,'SALES_DOC'));};
+  const isWaiting=r=>WAITING_STATUSES.includes(vcGet(r,'STATUS'))&&!isContract(r);
+  const total=rows.length, lived=rows.filter(isLived).length, progress=rows.filter(isProgress).length, contract=rows.filter(isContract).length, waiting=rows.filter(isWaiting).length;
   document.getElementById('stat-total').textContent=total.toLocaleString();
   document.getElementById('stat-lived').textContent=lived.toLocaleString();
   document.getElementById('stat-progress').textContent=progress.toLocaleString();
+  document.getElementById('stat-contract').textContent=contract.toLocaleString();
   document.getElementById('stat-waiting').textContent=waiting.toLocaleString();
-  renderGolivePct(total,lived,progress,waiting);
+  renderGolivePct(total,lived,progress,contract,waiting);
   renderStatusChart(rows);
-  renderZoneChart(rows,isLived,isProgress,isWaiting);
+  renderZoneChart(rows,isLived,isProgress,isContract);
   renderPhaseChart(rows);
 }
 
-function renderGolivePct(total,lived,progress,waiting) {
+function renderGolivePct(total,lived,progress,contract,waiting) {
   const pct=total>0?Math.round(lived/total*100):0;
   const r=32,c=40,circ=2*Math.PI*r,offset=circ-(pct/100)*circ;
   document.getElementById('golive-progress').innerHTML=`
@@ -603,6 +609,7 @@ function renderGolivePct(total,lived,progress,waiting) {
       <div class="progress-labels">
         <div class="pl-row"><span class="pl-label">✅ Golive แล้ว</span><span class="pl-val" style="color:#16A34A">${lived.toLocaleString()}</span></div>
         <div class="pl-row"><span class="pl-label">🚚 กำลังดำเนินการ</span><span class="pl-val" style="color:#CA8A04">${progress.toLocaleString()}</span></div>
+        <div class="pl-row"><span class="pl-label">📝 อยู่ระหว่างทำสัญญา</span><span class="pl-val" style="color:#4F46E5">${contract.toLocaleString()}</span></div>
         <div class="pl-row"><span class="pl-label">⏳ ยังไม่เริ่ม</span><span class="pl-val" style="color:#DC2626">${waiting.toLocaleString()}</span></div>
         <div class="pl-row" style="margin-top:4px;padding-top:6px;border-top:1px solid #F0EBE3"><span class="pl-label">รวม</span><span class="pl-val">${total.toLocaleString()} แห่ง</span></div>
       </div>
@@ -611,11 +618,11 @@ function renderGolivePct(total,lived,progress,waiting) {
 
 function renderStatusChart(rows) {
   const counts={};
-  rows.forEach(r=>{const s=vcGet(r,'STATUS')||'-';counts[s]=(counts[s]||0)+1;});
+  rows.forEach(r=>{const s=vcDisplayStatus(r)||'-';counts[s]=(counts[s]||0)+1;});
   const sorted=Object.entries(counts).sort((a,b)=>b[1]-a[1]);
   const max=sorted[0]?.[1]||1;
-  const colors={'Lived':'#16A34A','Ready for Training':'#2563EB','Machine in Transit':'#7C3AED','In process config network with IT':'#0891B2','Waiting for Integrate with PACS':'#CA8A04','Waiting for Swaping':'#EA580C','Ready for Sending Waiting for address':'#9333EA','-':'#D1C8BD'};
-  const short={'Ready for Training':'Ready Training','Machine in Transit':'In Transit','In process config network with IT':'Config Network','Waiting for Integrate with PACS':'Wait PACS','Waiting for Swaping':'Wait Swaping','Ready for Sending Waiting for address':'Ready Send'};
+  const colors={'Lived':'#16A34A','Contract in progress':'#6366F1','Ready for Training':'#2563EB','Machine in Transit':'#7C3AED','In process config network with IT':'#0891B2','Waiting for Integrate with PACS':'#CA8A04','Waiting for Swaping':'#EA580C','Ready for Sending Waiting for address':'#9333EA','-':'#D1C8BD'};
+  const short={'Contract in progress':'Contract','Ready for Training':'Ready Training','Machine in Transit':'In Transit','In process config network with IT':'Config Network','Waiting for Integrate with PACS':'Wait PACS','Waiting for Swaping':'Wait Swaping','Ready for Sending Waiting for address':'Ready Send'};
   document.getElementById('chart-status').innerHTML=sorted.map(([s,n])=>`
     <div class="bar-row">
       <div class="bar-label" title="${s}">${short[s]||s}</div>
@@ -624,14 +631,14 @@ function renderStatusChart(rows) {
     </div>`).join('');
 }
 
-function renderZoneChart(rows,isLived,isProgress,isWaiting) {
+function renderZoneChart(rows,isLived,isProgress,isContract) {
   const zones={};
   rows.forEach(r=>{
     const z=vcGet(r,'HEALTH_ZONE');if(!z)return;
     if(!zones[z])zones[z]={lived:0,progress:0,waiting:0,total:0};
     zones[z].total++;
     if(isLived(r))zones[z].lived++;
-    else if(isProgress(r))zones[z].progress++;
+    else if(isProgress(r)||isContract(r))zones[z].progress++;  // รวมทำสัญญาเข้าแถบกำลังดำเนินการ
     else zones[z].waiting++;
   });
   const sorted=Object.entries(zones).sort((a,b)=>parseFloat(a[0])-parseFloat(b[0]));
@@ -690,8 +697,39 @@ function populateZoneFilter() {
   zones.forEach(z=>{ const o=document.createElement('option');o.value=z;o.textContent=`เขต ${z}`;sel.appendChild(o); });
 }
 
+function statusLabel(s) {
+  if(!s||s==='-') return '— รอดำเนินการ';
+  if(s==='Lived') return 'Lived ✓';
+  if(s.toLowerCase().includes('transit')) return 'Machine in Transit';
+  if(s.toLowerCase().includes('config')) return 'Config Network with IT';
+  if(s.toLowerCase().includes('training')) return 'Ready for Training';
+  if(s.toLowerCase().includes('sending')||s.toLowerCase().includes('send waiting')) return 'Ready for Sending';
+  if(s.toLowerCase().includes('pacs')) return 'Waiting for PACS';
+  if(s.toLowerCase().includes('swap')) return 'Waiting for Swaping';
+  if(s.toLowerCase().includes('prepar')) return 'Machine Preparing';
+  return s.length>28?s.substring(0,26)+'…':s;
+}
+
+function populateStatusFilter() {
+  const allStatuses=[...new Set(VS.rows.map(r=>vcDisplayStatus(r)))];
+  const sel=document.getElementById('filter-status');
+  // clear all except first ("ทุกสถานะ")
+  while(sel.options.length>1) sel.remove(1);
+  // separate: Lived first, then others (non-empty, non-dash), dash last
+  const lived=allStatuses.filter(s=>s==='Lived');
+  const others=allStatuses.filter(s=>s&&s!=='-'&&s!=='Lived').sort();
+  const dash=allStatuses.filter(s=>!s||s==='-');
+  [...lived,...others,...(dash.length?['-']:[])].forEach(s=>{
+    const o=document.createElement('option');
+    o.value=s;
+    o.textContent=statusLabel(s);
+    sel.appendChild(o);
+  });
+}
+
 function statusBadge(s) {
   if(s==='Lived') return `<span class="badge badge-lived">Lived</span>`;
+  if(s==='Contract in progress') return `<span class="badge badge-contract">Contract</span>`;
   if(s==='-'||!s) return `<span class="badge badge-waiting">—</span>`;
   if(s.includes('Transit')) return `<span class="badge badge-transit">In Transit</span>`;
   if(s.includes('config')) return `<span class="badge badge-config">Config</span>`;
@@ -713,7 +751,7 @@ function renderTable() {
 
   VS.filtered=VS.rows.filter(r=>{
     if(ph && vcGet(r,'PHASE')!==ph) return false;
-    if(st && vcGet(r,'STATUS')!==st) return false;
+    if(st && vcDisplayStatus(r)!==st) return false;
     if(zn && vcGet(r,'HEALTH_ZONE')!==zn) return false;
     if(q) {
       const haystack=[vcGet(r,'HOSPITAL'),vcGet(r,'PROVINCE'),vcGet(r,'HCODE'),vcGet(r,'HEALTH_ZONE')].join(' ').toLowerCase();
@@ -741,7 +779,7 @@ function renderTable() {
           <td>${vcGet(r,'LEVEL')||'—'}</td>
           <td>${vcGet(r,'PROVINCE')||'—'}</td>
           <td style="text-align:center">${vcGet(r,'HEALTH_ZONE')||'—'}</td>
-          <td>${statusBadge(vcGet(r,'STATUS'))}</td>
+          <td>${statusBadge(vcDisplayStatus(r))}</td>
           <td style="font-size:12px;color:var(--text-muted)">${goliveDisp}</td>
           <td style="text-align:center">${boolIcon(vcGet(r,'PAID'))}</td>
           <td><button class="btn-view" onclick="event.stopPropagation();showDetail(${idx})" title="ดูรายละเอียด">👁</button></td>

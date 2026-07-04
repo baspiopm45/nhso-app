@@ -294,22 +294,28 @@ async function loadSheetData() {
 // ════════════════════════════════════════════
 function renderDashboard() {
   const rows = STATE.rows;
-  const total   = rows.length;
-  const lived   = rows.filter(r => getCell(r, 'STATUS') === 'Lived').length;
-  const transit = rows.filter(r => ['Machine in Transit','In process config network with IT','Ready for Training'].includes(getCell(r,'STATUS'))).length;
-  const waiting = rows.filter(r => ['Waiting for Integrate with PACS','Waiting for Swaping','-','Ready for Sending Waiting for address',''].includes(getCell(r,'STATUS'))).length;
-  const paid    = rows.filter(r => getCell(r,'PAID').toLowerCase() === 'true').length;
+  const total    = rows.length;
+  const lived    = rows.filter(r => getCell(r, 'STATUS') === 'Lived').length;
+  const transit  = rows.filter(r => ['Machine in Transit','In process config network with IT','Ready for Training'].includes(getCell(r,'STATUS'))).length;
+  const contract = rows.filter(r => displayStatus(r) === 'Contract in progress').length;
+  // waiting = ยังไม่เริ่ม แต่ไม่รวมที่ทำสัญญาแล้ว (แยกไปการ์ด Contract)
+  const waiting  = rows.filter(r =>
+    ['Waiting for Integrate with PACS','Waiting for Swaping','-','Ready for Sending Waiting for address',''].includes(getCell(r,'STATUS'))
+    && displayStatus(r) !== 'Contract in progress'
+  ).length;
+  const paid     = rows.filter(r => getCell(r,'PAID').toLowerCase() === 'true').length;
 
-  document.getElementById('stat-total').textContent   = total;
-  document.getElementById('stat-lived').textContent   = lived;
-  document.getElementById('stat-transit').textContent = transit;
-  document.getElementById('stat-waiting').textContent = waiting;
-  document.getElementById('stat-paid').textContent    = paid;
+  document.getElementById('stat-total').textContent    = total;
+  document.getElementById('stat-lived').textContent    = lived;
+  document.getElementById('stat-transit').textContent  = transit;
+  document.getElementById('stat-contract').textContent = contract;
+  document.getElementById('stat-waiting').textContent  = waiting;
+  document.getElementById('stat-paid').textContent     = paid;
 
   // Status chart
   const statusCount = {};
   rows.forEach(r => {
-    const s = getCell(r,'STATUS') || '-';
+    const s = displayStatus(r) || '-';
     statusCount[s] = (statusCount[s]||0) + 1;
   });
   const statusColors = ['blue','green','yellow','red','purple','green','blue'];
