@@ -67,6 +67,9 @@
     /* STAT CARDS */
     .stats-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(170px,1fr)); gap:16px; margin-bottom:24px; }
     .stat-card { background:var(--card-bg); border:1px solid var(--border); border-radius:14px; padding:20px; display:flex; align-items:center; gap:14px; box-shadow:var(--shadow); }
+    .stat-card.clickable { cursor:pointer; user-select:none; transition:transform .15s, box-shadow .15s, border-color .15s; }
+    .stat-card.clickable:hover { transform:translateY(-2px); box-shadow:var(--shadow-md); border-color:var(--accent); }
+    .stat-card.clickable:active { transform:translateY(0); }
     .stat-icon { width:44px; height:44px; border-radius:11px; display:flex; align-items:center; justify-content:center; font-size:20px; flex-shrink:0; }
     .stat-icon.orange { background:rgba(204,120,92,0.12); }
     .stat-icon.green  { background:rgba(22,163,74,0.10); }
@@ -325,11 +328,11 @@
         <div class="meta" id="last-updated">กำลังโหลดข้อมูล...</div>
       </div>
       <div class="stats-grid">
-        <div class="stat-card"><div class="stat-icon orange">🏥</div><div class="stat-info"><div class="value" id="stat-total">—</div><div class="label">รพ. ทั้งหมด</div></div></div>
-        <div class="stat-card"><div class="stat-icon green">✅</div><div class="stat-info"><div class="value" id="stat-lived">—</div><div class="label">Golive แล้ว</div></div></div>
-        <div class="stat-card"><div class="stat-icon yellow">🚚</div><div class="stat-info"><div class="value" id="stat-progress">—</div><div class="label">กำลังดำเนินการ</div></div></div>
-        <div class="stat-card"><div class="stat-icon indigo">📝</div><div class="stat-info"><div class="value" id="stat-contract">—</div><div class="label">อยู่ระหว่างทำสัญญา</div></div></div>
-        <div class="stat-card"><div class="stat-icon red">⏳</div><div class="stat-info"><div class="value" id="stat-waiting">—</div><div class="label">รอดำเนินการ</div></div></div>
+        <div class="stat-card clickable" onclick="drillCard('total')" title="คลิกเพื่อดูรายชื่อ รพ. ทั้งหมด"><div class="stat-icon orange">🏥</div><div class="stat-info"><div class="value" id="stat-total">—</div><div class="label">รพ. ทั้งหมด</div></div></div>
+        <div class="stat-card clickable" onclick="drillCard('lived')" title="คลิกเพื่อดูรายชื่อ รพ. ที่ Golive แล้ว"><div class="stat-icon green">✅</div><div class="stat-info"><div class="value" id="stat-lived">—</div><div class="label">Golive แล้ว</div></div></div>
+        <div class="stat-card clickable" onclick="drillCard('progress')" title="คลิกเพื่อดูรายชื่อ รพ. ที่กำลังดำเนินการ"><div class="stat-icon yellow">🚚</div><div class="stat-info"><div class="value" id="stat-progress">—</div><div class="label">กำลังดำเนินการ</div></div></div>
+        <div class="stat-card clickable" onclick="drillCard('contract')" title="คลิกเพื่อดูรายชื่อ รพ. ที่อยู่ระหว่างทำสัญญา"><div class="stat-icon indigo">📝</div><div class="stat-info"><div class="value" id="stat-contract">—</div><div class="label">อยู่ระหว่างทำสัญญา</div></div></div>
+        <div class="stat-card clickable" onclick="drillCard('waiting')" title="คลิกเพื่อดูรายชื่อ รพ. ที่รอดำเนินการ"><div class="stat-icon red">⏳</div><div class="stat-info"><div class="value" id="stat-waiting">—</div><div class="label">รอดำเนินการ</div></div></div>
       </div>
       <div class="charts-grid" style="margin-bottom:20px;">
         <div class="card">
@@ -387,6 +390,10 @@
       <div id="zone-filter-indicator" class="hidden zone-filter-bar">
         <span>🗺️ กำลังแสดง: <strong id="zone-filter-label"></strong></span>
         <button class="zone-filter-clear" onclick="clearZoneFilter()">✕ ล้างตัวกรอง</button>
+      </div>
+      <div id="card-filter-indicator" class="hidden zone-filter-bar">
+        <span>📌 กำลังแสดง: <strong id="card-filter-label"></strong></span>
+        <button class="zone-filter-clear" onclick="clearCardFilter()">✕ ล้างตัวกรอง</button>
       </div>
       <div class="table-wrap">
         <div class="table-container">
@@ -450,7 +457,7 @@
 const VIEWER_SHEET_ID   = '1HPCG5Vq4PlPPdHix42KiyGz6M4Cs-5PPBQoX8VuUzro';
 const VIEWER_SHEET_NAME = 'Sheet1';
 
-const VS = { user:null, accessToken:null, tokenClient:null, rows:[], headers:[], filtered:[], page:1, pageSize:25, zoneFilter:'' };
+const VS = { user:null, accessToken:null, tokenClient:null, rows:[], headers:[], filtered:[], page:1, pageSize:25, zoneFilter:'', cardFilter:'' };
 const VC = {};
 
 function vcBuildColIndex() {
@@ -466,6 +473,35 @@ function vcDisplayStatus(r) {
   if(s&&s!=='-') return s;
   if(vcTruthy(vcGet(r,'SALES_DOC'))) return 'Contract in progress';
   return s;
+}
+
+/* ── STAT CARD GROUPS (นิยามกลาง: dashboard + drill-down ใช้ชุดเดียวกัน, mirror admin) ── */
+const V_PROGRESS=['Machine in Transit','In process config network with IT','Ready for Training'];
+const V_WAITING=['Waiting for Integrate with PACS','Waiting for Swaping','Ready for Sending Waiting for address','-',''];
+const V_CARDS={
+  lived:    {label:'Golive แล้ว',       test:r=>vcGet(r,'STATUS')==='Lived'},
+  progress: {label:'กำลังดำเนินการ',     test:r=>V_PROGRESS.includes(vcGet(r,'STATUS'))},
+  contract: {label:'อยู่ระหว่างทำสัญญา', test:r=>vcDisplayStatus(r)==='Contract in progress'},
+  waiting:  {label:'รอดำเนินการ',        test:r=>V_WAITING.includes(vcGet(r,'STATUS'))&&vcDisplayStatus(r)!=='Contract in progress'},
+};
+
+/* ── DRILL CARD: คลิก stat card → หน้า รายการ รพ. พร้อมกรองตามกลุ่ม ── */
+function drillCard(key){
+  VS.cardFilter = V_CARDS[key] ? key : '';   // 'total' → '' = ดูทั้งหมด
+  navigateTo('hospitals');
+  const bar=document.getElementById('card-filter-indicator');
+  if(VS.cardFilter){
+    document.getElementById('card-filter-label').textContent=V_CARDS[key].label;
+    bar?.classList.remove('hidden');
+  } else {
+    bar?.classList.add('hidden');
+  }
+  VS.page=1; renderTable();
+}
+function clearCardFilter(){
+  VS.cardFilter='';
+  document.getElementById('card-filter-indicator')?.classList.add('hidden');
+  VS.page=1; renderTable();
 }
 
 function toast(msg,type='info') {
@@ -575,13 +611,11 @@ async function loadData() {
 /* ── DASHBOARD ── */
 function renderDashboard() {
   const rows=VS.rows;
-  // Status classification — mirror admin app (app.js) so viewer counts match exactly.
-  const PROGRESS_STATUSES=['Machine in Transit','In process config network with IT','Ready for Training'];
-  const WAITING_STATUSES=['Waiting for Integrate with PACS','Waiting for Swaping','Ready for Sending Waiting for address','-',''];
-  const isLived=r=>vcGet(r,'STATUS')==='Lived';
-  const isProgress=r=>PROGRESS_STATUSES.includes(vcGet(r,'STATUS'));
-  const isContract=r=>{const s=vcGet(r,'STATUS');return (!s||s==='-')&&vcTruthy(vcGet(r,'SALES_DOC'));};
-  const isWaiting=r=>WAITING_STATUSES.includes(vcGet(r,'STATUS'))&&!isContract(r);
+  // ใช้นิยามเดียวกับ V_CARDS (mirror admin) → เลขการ์ดตรงกับผล drill-down เสมอ
+  const isLived=V_CARDS.lived.test;
+  const isProgress=V_CARDS.progress.test;
+  const isContract=V_CARDS.contract.test;
+  const isWaiting=V_CARDS.waiting.test;
   const total=rows.length, lived=rows.filter(isLived).length, progress=rows.filter(isProgress).length, contract=rows.filter(isContract).length, waiting=rows.filter(isWaiting).length;
   document.getElementById('stat-total').textContent=total.toLocaleString();
   document.getElementById('stat-lived').textContent=lived.toLocaleString();
@@ -753,6 +787,7 @@ function renderTable() {
     if(ph && vcGet(r,'PHASE')!==ph) return false;
     if(st && vcDisplayStatus(r)!==st) return false;
     if(zn && vcGet(r,'HEALTH_ZONE')!==zn) return false;
+    if(VS.cardFilter && !V_CARDS[VS.cardFilter].test(r)) return false;
     if(q) {
       const haystack=[vcGet(r,'HOSPITAL'),vcGet(r,'PROVINCE'),vcGet(r,'HCODE'),vcGet(r,'HEALTH_ZONE')].join(' ').toLowerCase();
       if(!haystack.includes(q)) return false;

@@ -18,6 +18,7 @@ const STATE = {
   pageSize:     25,
   editRowIndex: null,   // 0-based index in STATE.rows (null = new)
   detailRow:    null,
+  cardFilter:   null,   // drill-down จาก stat card: 'lived'|'transit'|'contract'|'waiting'|'paid'
 };
 
 // ─── Column index helpers ──────────────────────────────────
@@ -89,6 +90,39 @@ function boolIcon(val) {
   if (v === 'true' || v === 'yes' || v === '1') return '<span class="text-green">✔</span>';
   if (v === 'false' || v === 'no' || v === '0') return '<span class="text-red">✗</span>';
   return '<span class="text-gray">-</span>';
+}
+
+// ─── Stat card groups (นิยามกลาง: dashboard + drill-down ใช้ชุดเดียวกัน) ───
+const PROGRESS_STATUSES = ['Machine in Transit','In process config network with IT','Ready for Training'];
+const WAITING_STATUSES  = ['Waiting for Integrate with PACS','Waiting for Swaping','Ready for Sending Waiting for address','-',''];
+
+const CARD_FILTERS = {
+  lived:    { label: 'Golive แล้ว',       test: r => getCell(r,'STATUS') === 'Lived' },
+  transit:  { label: 'กำลังดำเนินการ',     test: r => PROGRESS_STATUSES.includes(getCell(r,'STATUS')) },
+  contract: { label: 'อยู่ระหว่างทำสัญญา', test: r => displayStatus(r) === 'Contract in progress' },
+  waiting:  { label: 'รอดำเนินการ',        test: r => WAITING_STATUSES.includes(getCell(r,'STATUS')) && displayStatus(r) !== 'Contract in progress' },
+  paid:     { label: 'ชำระแล้ว',           test: r => getCell(r,'PAID').toLowerCase() === 'true' },
+};
+
+// คลิก stat card → ไปหน้า รายการโรงพยาบาล พร้อมกรองตามกลุ่มของการ์ด
+function drillCard(key) {
+  if (isViewer()) { toast('⚠️ ไม่มีสิทธิ์เข้าถึงหน้านี้', 'warning'); return; }
+  STATE.cardFilter = CARD_FILTERS[key] ? key : null;   // 'total' → null = ดูทั้งหมด
+  navigateTo('hospitals');
+  const bar = document.getElementById('card-filter-bar');
+  if (STATE.cardFilter) {
+    document.getElementById('card-filter-label').textContent = CARD_FILTERS[key].label;
+    bar?.classList.remove('hidden');
+  } else {
+    bar?.classList.add('hidden');
+  }
+  applyFilters();
+}
+
+function clearCardFilter() {
+  STATE.cardFilter = null;
+  document.getElementById('card-filter-bar')?.classList.add('hidden');
+  applyFilters();
 }
 
 // ════════════════════════════════════════════
@@ -295,15 +329,12 @@ async function loadSheetData() {
 function renderDashboard() {
   const rows = STATE.rows;
   const total    = rows.length;
-  const lived    = rows.filter(r => getCell(r, 'STATUS') === 'Lived').length;
-  const transit  = rows.filter(r => ['Machine in Transit','In process config network with IT','Ready for Training'].includes(getCell(r,'STATUS'))).length;
-  const contract = rows.filter(r => displayStatus(r) === 'Contract in progress').length;
-  // waiting = ยังไม่เริ่ม แต่ไม่รวมที่ทำสัญญาแล้ว (แยกไปการ์ด Contract)
-  const waiting  = rows.filter(r =>
-    ['Waiting for Integrate with PACS','Waiting for Swaping','-','Ready for Sending Waiting for address',''].includes(getCell(r,'STATUS'))
-    && displayStatus(r) !== 'Contract in progress'
-  ).length;
-  const paid     = rows.filter(r => getCell(r,'PAID').toLowerCase() === 'true').length;
+  // ใช้นิยามเดียวกับ CARD_FILTERS → เลขการ์ดตรงกับผล drill-down เสมอ
+  const lived    = rows.filter(CARD_FILTERS.lived.test).length;
+  const transit  = rows.filter(CARD_FILTERS.transit.test).length;
+  const contract = rows.filter(CARD_FILTERS.contract.test).length;
+  const waiting  = rows.filter(CARD_FILTERS.waiting.test).length;
+  const paid     = rows.filter(CARD_FILTERS.paid.test).length;
 
   document.getElementById('stat-total').textContent    = total;
   document.getElementById('stat-lived').textContent    = lived;
@@ -389,6 +420,7 @@ function applyFilters() {
     if (status && s !== status)  return false;
     if (zone   && z !== zone)    return false;
     if (sales  && sl !== sales)  return false;
+    if (STATE.cardFilter && !CARD_FILTERS[STATE.cardFilter].test(row)) return false;
     return true;
   });
 
@@ -928,5 +960,7 @@ window.addEventListener('DOMContentLoaded', () => {
 });
 
 // Expose functions needed by inline onclick
-window.openDetail    = openDetail;
-window.openEditModal = openEditModal;
+window.openDetail      = openDetail;
+window.openEditModal   = openEditModal;
+window.drillCard       = drillCard;
+window.clearCardFilter = clearCardFilter;

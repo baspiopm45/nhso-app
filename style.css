@@ -323,6 +323,32 @@ input, select, textarea { font-family: inherit; }
 }
 
 .stat-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); }
+.stat-card.clickable { cursor: pointer; user-select: none; }
+.stat-card.clickable:active { transform: translateY(0); }
+
+/* ─── Card drill-down filter bar ─────────────────────────── */
+.card-filter-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  padding: 8px 14px;
+  background: var(--primary-light);
+  border: 1px solid #c3d4f9;
+  border-radius: var(--radius-sm);
+  font-size: .85rem;
+  color: var(--primary-dark);
+}
+.card-filter-clear {
+  margin-left: auto;
+  cursor: pointer;
+  font-weight: 700;
+  color: var(--primary);
+  background: none;
+  border: none;
+  font-size: .85rem;
+}
+.card-filter-clear:hover { color: var(--primary-dark); }
 
 .stat-icon {
   width: 52px; height: 52px;
