@@ -550,6 +550,7 @@ td.province { color: var(--gray-600); }
 }
 
 .badge-lived      { background: #d1fae5; color: #065f46; }
+.badge-contract   { background: #e0e7ff; color: #3730a3; }
 .badge-training   { background: #dbeafe; color: #1e40af; }
 .badge-transit    { background: #fef3c7; color: #92400e; }
 .badge-waiting    { background: #fee2e2; color: #991b1b; }

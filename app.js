@@ -8,6 +8,7 @@ const STATE = {
   user:         null,
   accessToken:  null,
   tokenClient:  null,
+  role:         null,   // 'admin' | 'viewer' | null
   rows:         [],     // raw data from Sheet (array of arrays)
   headers:      [],     // first row = column names
   filtered:     [],     // rows after search/filter
@@ -48,6 +49,7 @@ function toast(msg, type = 'info') {
 function statusBadge(status) {
   const map = {
     'Lived':                                 'badge-lived',
+    'Contract in progress':                  'badge-contract',
     'Ready for Training':                    'badge-training',
     'Machine in Transit':                    'badge-transit',
     'In process config network with IT':     'badge-process',
@@ -57,6 +59,7 @@ function statusBadge(status) {
   };
   const cls = map[status] || 'badge-default';
   const short = {
+    'Contract in progress': 'Contract',
     'Ready for Training': 'Ready Train',
     'Machine in Transit': 'In Transit',
     'In process config network with IT': 'Config Net',
@@ -67,6 +70,20 @@ function statusBadge(status) {
   return `<span class="badge ${cls}">${short[status] || status || '-'}</span>`;
 }
 
+function isTruthy(val) {
+  const v = String(val).toLowerCase();
+  return v === 'true' || v === 'yes' || v === '1';
+}
+
+// สถานะสำหรับแสดงผล: ถ้ายังไม่มี Implement Status จริง แต่ Sales Doc = TRUE
+// → แสดง "Contract in progress" (อยู่ระหว่างทำสัญญา)
+function displayStatus(row) {
+  const s = getCell(row, 'STATUS');
+  if (s && s !== '-') return s;                       // มีสถานะติดตั้งจริงแล้ว → คงไว้
+  if (isTruthy(getCell(row, 'SALES_DOC'))) return 'Contract in progress';
+  return s;
+}
+
 function boolIcon(val) {
   const v = String(val).toLowerCase();
   if (v === 'true' || v === 'yes' || v === '1') return '<span class="text-green">✔</span>';
@@ -74,24 +91,37 @@ function boolIcon(val) {
   return '<span class="text-gray">-</span>';
 }
 
-
+// ════════════════════════════════════════════
+// ROLE-BASED ACCESS CONTROL
+// ════════════════════════════════════════════
 function determineRole(email) {
   if (!email) return null;
   const em = email.toLowerCase();
   if (em.endsWith('@' + CONFIG.ADMIN_DOMAIN)) return 'admin';
   if (CONFIG.VIEWER_EMAILS.map(e => e.toLowerCase()).includes(em)) return 'viewer';
-  return null;
+  return null; // ไม่มีสิทธิ์
 }
+
 function isAdmin() { return STATE.role === 'admin'; }
 function isViewer() { return STATE.role === 'viewer'; }
+
 function applyRoleUI() {
   if (isViewer()) {
-    ['hospitals','tracking','add'].forEach(p => document.querySelector(`.nav-item[data-page="${p}"]`)?.classList.add('hidden'));
+    // ซ่อนเมนูที่ Viewer เข้าไม่ได้
+    ['hospitals', 'tracking', 'add'].forEach(page => {
+      document.querySelector(`.nav-item[data-page="${page}"]`)?.classList.add('hidden');
+    });
+
+    // ซ่อน PACS chart card
     document.getElementById('card-pacs')?.classList.add('hidden');
+
+    // ซ่อนปุ่ม Refresh และแสดง View Only badge
     document.getElementById('btn-refresh').classList.add('hidden');
     document.getElementById('sync-text').textContent = '👁 View Only';
+    document.getElementById('sync-status').style.color = '#e3a008';
   }
 }
+
 // ════════════════════════════════════════════
 // GOOGLE AUTH
 // ════════════════════════════════════════════
@@ -119,8 +149,15 @@ async function handleToken(response) {
   }
   STATE.accessToken = response.access_token;
   await fetchUserInfo();
+
+  // ตรวจสอบสิทธิ์
   STATE.role = determineRole(STATE.user?.email);
-  if (!STATE.role) { toast('❌ ไม่มีสิทธิ์เข้าใช้งาน', 'error'); setTimeout(handleLogout, 2500); return; }
+  if (!STATE.role) {
+    toast('❌ ไม่มีสิทธิ์เข้าใช้งาน กรุณาติดต่อผู้ดูแลระบบ', 'error');
+    setTimeout(handleLogout, 2500);
+    return;
+  }
+
   showApp();
   applyRoleUI();
   await loadSheetData();
@@ -337,7 +374,7 @@ function applyFilters() {
     const prov  = getCell(row,'PROVINCE').toLowerCase();
     const hcode = getCell(row,'HCODE').toLowerCase();
     const p     = String(getCell(row,'PHASE'));
-    const s     = getCell(row,'STATUS');
+    const s     = displayStatus(row);
     const z     = String(getCell(row,'HEALTH_ZONE'));
     const sl    = getCell(row,'SALES');
 
@@ -388,7 +425,7 @@ function renderTable() {
           <td class="province">${getCell(row,'PROVINCE') || '-'}</td>
           <td>${getCell(row,'HEALTH_ZONE') || '-'}</td>
           <td>${getCell(row,'PACS') || '-'}</td>
-          <td>${statusBadge(getCell(row,'STATUS'))}</td>
+          <td>${statusBadge(displayStatus(row))}</td>
           <td>${getCell(row,'GOLIVE') || '-'}</td>
           <td>${boolIcon(getCell(row,'PAID'))}</td>
           <td>
@@ -774,7 +811,7 @@ function openDetail(absIdx) {
       <div class="detail-section">สถานะ</div>
       <div class="detail-item" style="grid-column:1/-1">
         <div class="detail-label">Implement Status</div>
-        <div class="detail-value">${statusBadge(getCell(row,'STATUS'))}</div>
+        <div class="detail-value">${statusBadge(displayStatus(row))}</div>
       </div>
       ${d('SEND_DATE','วันที่ส่งเครื่อง')} ${d('GOLIVE','Golive Date')}
       ${d('CONTRACT_START','เริ่มสัญญา')} ${d('CONTRACT_END','สิ้นสุดสัญญา')}
@@ -802,7 +839,12 @@ const PAGE_META = {
 };
 
 function navigateTo(pageName) {
-  if (isViewer && isViewer() && ['hospitals','tracking','add'].includes(pageName)) { toast('⚠️ ไม่มีสิทธิ์', 'warning'); return; }
+  // ป้องกัน Viewer เข้าหน้าที่ไม่มีสิทธิ์
+  if (isViewer() && ['hospitals', 'tracking', 'add'].includes(pageName)) {
+    toast('⚠️ ไม่มีสิทธิ์เข้าถึงหน้านี้', 'warning');
+    return;
+  }
+
   document.querySelectorAll('.page').forEach(p => p.classList.add('hidden'));
   document.getElementById(`page-${pageName}`)?.classList.remove('hidden');
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));

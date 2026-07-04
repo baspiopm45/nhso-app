@@ -15,10 +15,19 @@ const CONFIG = {
   // 3) ชื่อ Sheet ที่ใช้งาน (ตรงกับชื่อ Tab ใน Google Sheet)
   SHEET_NAME: 'Master',
 
-  // 4) (Optional) จำกัดให้เฉพาะ email นี้ login ได้ เช่น 'yourteam.com'
-  //    ถ้าไม่จำกัด ให้ตั้งเป็น null
+  // ─── Role-based Access Control ───────────────────────────
+  // Admin: email ลงท้าย @ADMIN_DOMAIN → เข้าได้ทุกฟีเจอร์
   ADMIN_DOMAIN: 'perceptra.tech',
-  VIEWER_EMAILS: ['nongkoi.nhso@gmail.com','baspiopm45@gmail.com','jeabpharmacy@gmail.com'],
+
+  // Viewer: email นอกองค์กรที่อนุญาตเฉพาะ → ดูได้อย่างเดียว
+  // เพิ่ม email ได้ที่นี่
+  VIEWER_EMAILS: [
+    'nongkoi.nhso@gmail.com',
+    'baspiopm45@gmail.com',
+    'jeabpharmacy@gmail.com',
+  ],
+
+  // (เดิม - ไม่ใช้แล้ว แต่เก็บไว้)
   ALLOWED_DOMAIN: null,
 
   // Column definitions (สำคัญ: ต้องตรงกับ Header row ใน Google Sheet)
@@ -52,6 +61,7 @@ const CONFIG = {
   // Status options
   STATUS_OPTIONS: [
     '-',
+    'Contract in progress',
     'Lived',
     'Ready for Training',
     'Ready for Sending Waiting for address',
