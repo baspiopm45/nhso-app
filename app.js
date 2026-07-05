@@ -748,13 +748,51 @@ function getFormData(form) {
   return data;
 }
 
-function rowFromFormData(data) {
+function rowFromFormData(data, baseRow = null) {
   // Build array in column order
+  // B1: ถ้ามี baseRow (ตอนแก้ไข) เริ่มจากค่าเดิมของแถวนั้น แล้วทับเฉพาะ field ที่ mapping รู้จัก
+  // → คอลัมน์ที่อยู่นอก CONFIG.COLUMNS (เช่น note ที่เพิ่มทีหลัง / header สะกดไม่ตรง) ไม่ถูกล้าง
   const row = new Array(STATE.headers.length).fill('');
+  if (baseRow) baseRow.forEach((v, i) => { if (i < row.length) row[i] = v ?? ''; });
   Object.entries(COL).forEach(([key, idx]) => {
     if (data[key] !== undefined) row[idx] = data[key];
   });
   return row;
+}
+
+// ─── B2: หาแถวจริงใน Sheet ก่อนเซฟ ─────────────────────────
+// index ที่จำไว้ตอนโหลดอาจเพี้ยน ถ้ามีคน แทรก/ลบ/เรียง แถวใน Sheet ระหว่างเปิดแอปค้างไว้
+// → โหลดข้อมูลสดแล้วหาแถวเดิมด้วย HCODE → ชื่อหน่วยบริการ → เทียบเนื้อหาทั้งแถว
+function locateRow(rows, original) {
+  const findUnique = (key) => {
+    const val = String(getCell(original, key)).trim();
+    if (!val) return -1;
+    const hits = [];
+    rows.forEach((r, i) => { if (String(getCell(r, key)).trim() === val) hits.push(i); });
+    return hits.length === 1 ? hits[0] : -1;   // ต้อง unique เท่านั้น กันจับผิดแถว
+  };
+  let at = findUnique('HCODE');
+  if (at === -1) at = findUnique('HOSPITAL');
+  if (at === -1) {
+    const sig = JSON.stringify(original);
+    at = rows.findIndex(r => JSON.stringify(r) === sig);
+  }
+  return at;
+}
+
+async function relocateEditRow(localIndex) {
+  const original = STATE.rows[localIndex];
+  const fresh = await sheetsGet(`${CONFIG.SHEET_NAME}!A1:X2000`);
+  const all = fresh.values || [];
+  if (JSON.stringify(all[0] || []) !== JSON.stringify(STATE.headers)) {
+    throw new Error('โครงสร้างคอลัมน์ใน Sheet เปลี่ยนไป — กดรีเฟรชแล้วลองใหม่');
+  }
+  const rows = all.slice(1);
+  const at = locateRow(rows, original);
+  if (at === -1) {
+    throw new Error('ไม่พบแถวเดิมใน Sheet (อาจถูกลบ/แก้ไขจากที่อื่น) — กดรีเฟรชแล้วลองใหม่');
+  }
+  return { rows, at };
 }
 
 function openAddModal() {
@@ -782,7 +820,6 @@ async function saveModal() {
   if (!form.checkValidity()) { form.reportValidity(); return; }
 
   const data = getFormData(form);
-  const rowArr = rowFromFormData(data);
 
   const saveBtn = document.getElementById('modal-save');
   saveBtn.disabled = true;
@@ -791,14 +828,20 @@ async function saveModal() {
   try {
     if (STATE.editRowIndex === null) {
       // Append new row (row index = headers + rows.length + 1)
+      const rowArr = rowFromFormData(data);
       await sheetsAppend(`${CONFIG.SHEET_NAME}!A:X`, [rowArr]);
       STATE.rows.push(rowArr);
       toast('เพิ่มรายการสำเร็จ ✅', 'success');
     } else {
-      // Update existing row (sheet row = index + 2 because header is row 1)
-      const sheetRow = STATE.editRowIndex + 2;
+      // B2: หาแถวจริงจากข้อมูลสดก่อนเซฟ (ไม่ยึด index ตอนโหลด)
+      const { rows: freshRows, at } = await relocateEditRow(STATE.editRowIndex);
+      // B1: ใช้แถวสดเป็นฐาน → คอลัมน์นอก mapping คงค่าเดิมไว้
+      const rowArr = rowFromFormData(data, freshRows[at]);
+      const sheetRow = at + 2;   // +2 เพราะ header คือแถว 1
       await sheetsUpdate(`${CONFIG.SHEET_NAME}!A${sheetRow}:X${sheetRow}`, [rowArr]);
-      STATE.rows[STATE.editRowIndex] = rowArr;
+      // sync local state ให้ตรงกับ Sheet ล่าสุดทั้งชุด
+      freshRows[at] = rowArr;
+      STATE.rows = freshRows;
       toast('บันทึกการแก้ไขสำเร็จ ✅', 'success');
     }
     closeModal();
