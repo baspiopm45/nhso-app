@@ -467,6 +467,8 @@ function vcBuildColIndex() {
 }
 function vcGet(row,key) { return (row && VC[key]!==undefined) ? (row[VC[key]]??'') : ''; }
 function vcTruthy(v) { const s=String(v).toLowerCase(); return s==='true'||s==='yes'||s==='1'; }
+// B5: escape ค่าจาก Sheet ก่อนยัดลง innerHTML — กัน HTML injection / อักขระพิเศษพัง layout
+function esc(v){return String(v??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
 // สถานะแสดงผล: ยังไม่มี Implement Status จริง แต่ Sales Doc=TRUE → "Contract in progress"
 function vcDisplayStatus(r) {
   const s=vcGet(r,'STATUS');
@@ -670,7 +672,7 @@ function renderStatusChart(rows) {
   const short={'Contract in progress':'Contract','Ready for Training':'Ready Training','Machine in Transit':'In Transit','In process config network with IT':'Config Network','Waiting for Integrate with PACS':'Wait PACS','Waiting for Swaping':'Wait Swaping','Ready for Sending Waiting for address':'Ready Send'};
   document.getElementById('chart-status').innerHTML=sorted.map(([s,n])=>`
     <div class="bar-row">
-      <div class="bar-label" title="${s}">${short[s]||s}</div>
+      <div class="bar-label" title="${esc(s)}">${esc(short[s]||s)}</div>
       <div class="bar-track"><div class="bar-fill" style="width:${(n/max*100).toFixed(1)}%;background:${colors[s]||(vcIsLived(s)?'#16A34A':'#CC785C')}"></div></div>
       <div class="bar-num">${n}</div>
     </div>`).join('');
@@ -693,8 +695,8 @@ function renderZoneChart(rows,isLived,isProgress,isContract) {
     const ln=parseFloat(lp)>0?segLabel(d.lived,lp):'';
     const pn=parseFloat(pp)>0?segLabel(d.progress,pp):'';
     const wn=parseFloat(wp)>0?segLabel(d.waiting,wp):'';
-    return `<div class="stacked-row" onclick="drillZone('${z}')" title="คลิกเพื่อดูรายชื่อ รพ. เขต ${z}">
-      <div class="zone-label">เขต ${z}</div>
+    return `<div class="stacked-row" data-z="${esc(z)}" onclick="drillZone(this.dataset.z)" title="คลิกเพื่อดูรายชื่อ รพ. เขต ${esc(z)}">
+      <div class="zone-label">เขต ${esc(z)}</div>
       <div class="stacked-bar-wrap">
         <div class="stacked-seg seg-waiting" style="width:${wp}%;min-width:${parseFloat(wp)>0?'18px':'0'}">${wn}</div>
         <div class="stacked-seg seg-progress" style="width:${pp}%;min-width:${parseFloat(pp)>0?'18px':'0'}">${pn}</div>
@@ -713,7 +715,7 @@ function renderPhaseChart(rows) {
   const colors=['#CC785C','#16A34A','#2563EB','#CA8A04','#7C3AED'];
   document.getElementById('chart-phase').innerHTML=sorted.map(([p,n],i)=>`
     <div class="bar-row">
-      <div class="bar-label">Phase ${p}</div>
+      <div class="bar-label">Phase ${esc(p)}</div>
       <div class="bar-track"><div class="bar-fill" style="width:${(n/max*100).toFixed(1)}%;background:${colors[i%colors.length]}"></div></div>
       <div class="bar-num">${n}</div>
     </div>`).join('');
@@ -722,6 +724,7 @@ function renderPhaseChart(rows) {
 /* ── DRILL ZONE ── */
 function drillZone(zone) {
   VS.zoneFilter = zone;
+  VS.page = 1;   // B7: reset หน้า กันเจอ "ไม่พบข้อมูล" ถ้าค้างอยู่หน้าท้ายๆ
   document.getElementById('filter-zone').value = zone;
   navigateTo('hospitals');
   document.getElementById('zone-filter-indicator').classList.remove('hidden');
@@ -730,6 +733,7 @@ function drillZone(zone) {
 
 function clearZoneFilter() {
   VS.zoneFilter='';
+  VS.page=1;
   document.getElementById('filter-zone').value='';
   document.getElementById('zone-filter-indicator').classList.add('hidden');
   renderTable();
@@ -739,6 +743,7 @@ function clearZoneFilter() {
 function populateZoneFilter() {
   const zones=[...new Set(VS.rows.map(r=>vcGet(r,'HEALTH_ZONE')))].filter(Boolean).sort((a,b)=>parseFloat(a)-parseFloat(b));
   const sel=document.getElementById('filter-zone');
+  while(sel.options.length>1) sel.remove(1);   // B4: ล้างของเดิมก่อน กัน option งอกซ้ำ
   zones.forEach(z=>{ const o=document.createElement('option');o.value=z;o.textContent=`เขต ${z}`;sel.appendChild(o); });
 }
 
@@ -773,12 +778,12 @@ function populateStatusFilter() {
 }
 
 function statusBadge(s) {
-  if(vcIsLived(s)) return `<span class="badge badge-lived">${s==='Lived'?'Lived':(s.length>16?s.substring(0,14)+'…':s)}</span>`;
+  if(vcIsLived(s)) return `<span class="badge badge-lived">${s==='Lived'?'Lived':esc(s.length>16?s.substring(0,14)+'…':s)}</span>`;
   if(s==='Contract in progress') return `<span class="badge badge-contract">Contract</span>`;
   if(s==='-'||!s) return `<span class="badge badge-waiting">—</span>`;
   if(s.includes('Transit')) return `<span class="badge badge-transit">In Transit</span>`;
   if(s.includes('config')) return `<span class="badge badge-config">Config</span>`;
-  return `<span class="badge badge-progress">${s.substring(0,14)}…</span>`;
+  return `<span class="badge badge-progress">${esc(s.substring(0,14))}…</span>`;
 }
 
 function boolIcon(v) {
@@ -820,13 +825,13 @@ function renderTable() {
         const golive=vcGet(r,'GOLIVE');
         const goliveDisp=golive?golive.toString().substring(0,10):'—';
         return `<tr onclick="showDetail(${idx})">
-          <td><span class="td-phase">${vcGet(r,'PHASE')||'?'}</span></td>
-          <td class="td-hosp">${vcGet(r,'HOSPITAL')}</td>
-          <td>${vcGet(r,'LEVEL')||'—'}</td>
-          <td>${vcGet(r,'PROVINCE')||'—'}</td>
-          <td style="text-align:center">${vcGet(r,'HEALTH_ZONE')||'—'}</td>
+          <td><span class="td-phase">${esc(vcGet(r,'PHASE'))||'?'}</span></td>
+          <td class="td-hosp">${esc(vcGet(r,'HOSPITAL'))}</td>
+          <td>${esc(vcGet(r,'LEVEL'))||'—'}</td>
+          <td>${esc(vcGet(r,'PROVINCE'))||'—'}</td>
+          <td style="text-align:center">${esc(vcGet(r,'HEALTH_ZONE'))||'—'}</td>
           <td>${statusBadge(vcDisplayStatus(r))}</td>
-          <td style="font-size:12px;color:var(--text-muted)">${goliveDisp}</td>
+          <td style="font-size:12px;color:var(--text-muted)">${esc(goliveDisp)}</td>
           <td style="text-align:center">${boolIcon(vcGet(r,'PAID'))}</td>
           <td><button class="btn-view" onclick="event.stopPropagation();showDetail(${idx})" title="ดูรายละเอียด">👁</button></td>
         </tr>`;
@@ -887,7 +892,7 @@ function showDetail(idx) {
       ${fields.map(f=>`
         <div class="detail-item">
           <label>${f.label}</label>
-          <div class="val">${vcGet(r,f.key)||'—'}</div>
+          <div class="val">${esc(vcGet(r,f.key))||'—'}</div>
         </div>`).join('')}
     </div>`;
   document.getElementById('detail-overlay').classList.remove('hidden');

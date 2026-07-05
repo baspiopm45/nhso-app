@@ -36,6 +36,31 @@ function getCell(row, key) {
   return (row && COL[key] !== undefined) ? (row[COL[key]] ?? '') : '';
 }
 
+// B5: escape ค่าจาก Sheet ก่อนยัดลง innerHTML / value="…"
+// กันชื่อที่มี " < > พังฟอร์ม-ตาราง และกัน HTML injection
+function esc(v) {
+  return String(v ?? '')
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+// B6: เปรียบเทียบแบบรู้ชนิดข้อมูล — ตัวเลขเทียบเป็นตัวเลข (เขต 2 < 10),
+// วันที่ M/D/YYYY เทียบตามเวลา, ที่เหลือเทียบตามตัวอักษรไทย
+function parseSheetDate(s) {
+  let m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);          // M/D/YYYY จาก Sheets
+  if (m) return new Date(+m[3], +m[1] - 1, +m[2]).getTime();
+  m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);                     // YYYY-MM-DD จาก input date
+  if (m) return new Date(+m[1], +m[2] - 1, +m[3]).getTime();
+  return null;
+}
+
+function smartCompare(sa, sb) {
+  if (/^-?[\d.]+$/.test(sa) && /^-?[\d.]+$/.test(sb)) return parseFloat(sa) - parseFloat(sb);
+  const da = parseSheetDate(sa), db = parseSheetDate(sb);
+  if (da !== null && db !== null) return da - db;
+  return sa.localeCompare(sb, 'th');
+}
+
 // ─── Toast ────────────────────────────────────────────────
 function toast(msg, type = 'info') {
   const icons = { info: 'ℹ️', success: '✅', error: '❌', warning: '⚠️' };
@@ -69,7 +94,7 @@ function statusBadge(status) {
     'Ready for Sending Waiting for address': 'Ready Send',
     'Waiting for Swaping': 'Wait Swap',
   };
-  return `<span class="badge ${cls}">${short[status] || status || '-'}</span>`;
+  return `<span class="badge ${cls}">${esc(short[status] || status || '-')}</span>`;
 }
 
 function isTruthy(val) {
@@ -298,23 +323,26 @@ async function loadSheetData() {
     STATE.rows    = all.slice(1);
     buildColIndex();
 
-    // Populate zone filter
-    const zones = [...new Set(STATE.rows.map(r => getCell(r, 'HEALTH_ZONE')))].filter(Boolean).sort((a, b) => parseFloat(a) - parseFloat(b));
-    const zoneSelect = document.getElementById('filter-zone');
-    zones.forEach(z => {
-      const opt = document.createElement('option');
-      opt.value = z; opt.textContent = `เขต ${z}`;
-      zoneSelect.appendChild(opt);
-    });
+    // B4: เติม dropdown แบบล้างของเดิมก่อน (กด รีเฟรช แล้ว option ไม่งอกซ้ำ)
+    // และคงค่าที่ผู้ใช้เลือกไว้ ถ้าค่านั้นยังมีอยู่ในข้อมูลชุดใหม่
+    const fillSelect = (selectId, values, labelFn) => {
+      const sel = document.getElementById(selectId);
+      if (!sel) return;
+      const prev = sel.value;
+      while (sel.options.length > 1) sel.remove(1);   // เหลือ option แรก ("ทุก…")
+      values.forEach(v => {
+        const opt = document.createElement('option');
+        opt.value = v; opt.textContent = labelFn(v);
+        sel.appendChild(opt);
+      });
+      if (values.includes(prev)) sel.value = prev;
+    };
 
-    // Populate sales filter
+    const zones = [...new Set(STATE.rows.map(r => getCell(r, 'HEALTH_ZONE')))].filter(Boolean).sort((a, b) => parseFloat(a) - parseFloat(b));
+    fillSelect('filter-zone', zones, z => `เขต ${z}`);
+
     const salesList = [...new Set(STATE.rows.map(r => getCell(r, 'SALES')))].filter(Boolean).sort();
-    const salesSelect = document.getElementById('filter-sales');
-    salesList.forEach(s => {
-      const opt = document.createElement('option');
-      opt.value = s; opt.textContent = s;
-      salesSelect.appendChild(opt);
-    });
+    fillSelect('filter-sales', salesList, s => s);
 
     applyFilters();
     renderDashboard();
@@ -396,7 +424,7 @@ function renderBarChart(containerId, data, maxVal, colors = ['blue']) {
     const color = colors[i % colors.length];
     container.innerHTML += `
       <div class="bar-row">
-        <div class="bar-label" title="${label}">${label}</div>
+        <div class="bar-label" title="${esc(label)}">${esc(label)}</div>
         <div class="bar-track"><div class="bar-fill ${color}" style="width:${pct}%"></div></div>
         <div class="bar-val">${val}</div>
       </div>`;
@@ -440,9 +468,12 @@ function applyFilters() {
     };
     const key = colMap[STATE.sortCol];
     STATE.filtered.sort((a,b) => {
-      const va = getCell(a, key);
-      const vb = getCell(b, key);
-      const cmp = va < vb ? -1 : va > vb ? 1 : 0;
+      const va = String(getCell(a, key)).trim();
+      const vb = String(getCell(b, key)).trim();
+      if (!va && !vb) return 0;
+      if (!va) return 1;    // ค่าว่างไปท้ายเสมอ ไม่ว่าเรียงทิศไหน
+      if (!vb) return -1;
+      const cmp = smartCompare(va, vb);
       return STATE.sortDir === 'asc' ? cmp : -cmp;
     });
   }
@@ -464,14 +495,14 @@ function renderTable() {
       const absIdx = STATE.rows.indexOf(row);
       return `
         <tr>
-          <td>${getCell(row,'PHASE') || '-'}</td>
-          <td class="hospital-name">${getCell(row,'HOSPITAL') || '-'}</td>
-          <td>${getCell(row,'LEVEL') || '-'}</td>
-          <td class="province">${getCell(row,'PROVINCE') || '-'}</td>
-          <td>${getCell(row,'HEALTH_ZONE') || '-'}</td>
-          <td>${getCell(row,'PACS') || '-'}</td>
+          <td>${esc(getCell(row,'PHASE')) || '-'}</td>
+          <td class="hospital-name">${esc(getCell(row,'HOSPITAL')) || '-'}</td>
+          <td>${esc(getCell(row,'LEVEL')) || '-'}</td>
+          <td class="province">${esc(getCell(row,'PROVINCE')) || '-'}</td>
+          <td>${esc(getCell(row,'HEALTH_ZONE')) || '-'}</td>
+          <td>${esc(getCell(row,'PACS')) || '-'}</td>
           <td>${statusBadge(displayStatus(row))}</td>
-          <td>${getCell(row,'GOLIVE') || '-'}</td>
+          <td>${esc(getCell(row,'GOLIVE')) || '-'}</td>
           <td>${boolIcon(getCell(row,'PAID'))}</td>
           <td>
             <div class="action-btns">
@@ -570,10 +601,10 @@ function renderTrackingTable() {
   } else {
     tbody.innerHTML = rows.map(row => `
       <tr>
-        <td>${getCell(row,'PHASE') || '-'}</td>
-        <td class="hospital-name">${getCell(row,'HOSPITAL') || '-'}</td>
-        <td>${getCell(row,'PROVINCE') || '-'}</td>
-        <td>${getCell(row,'SALES') || '-'}</td>
+        <td>${esc(getCell(row,'PHASE')) || '-'}</td>
+        <td class="hospital-name">${esc(getCell(row,'HOSPITAL')) || '-'}</td>
+        <td>${esc(getCell(row,'PROVINCE')) || '-'}</td>
+        <td>${esc(getCell(row,'SALES')) || '-'}</td>
         <td>${boolIcon(getCell(row,'SALES_DOC'))}</td>
         <td>${boolIcon(getCell(row,'CONTRACT_DOC'))}</td>
         <td>${boolIcon(getCell(row,'PAID'))}</td>
@@ -606,32 +637,32 @@ function buildForm(data = {}) {
 
       <div class="form-group">
         <label>ลำดับ</label>
-        <input class="form-control" name="ORDER" type="number" value="${data.ORDER||''}" placeholder="เลขลำดับ" />
+        <input class="form-control" name="ORDER" type="number" value="${esc(data.ORDER||'')}" placeholder="เลขลำดับ" />
       </div>
 
       <div class="form-group full">
         <label>ชื่อหน่วยบริการ *</label>
-        <input class="form-control" name="HOSPITAL" required value="${data.HOSPITAL||''}" placeholder="ชื่อโรงพยาบาล" />
+        <input class="form-control" name="HOSPITAL" required value="${esc(data.HOSPITAL||'')}" placeholder="ชื่อโรงพยาบาล" />
       </div>
 
       <div class="form-group">
         <label>ประเภท</label>
-        <input class="form-control" name="TYPE" value="${data.TYPE||''}" placeholder="คัดเลือกหลัก / เพิ่มเติม" />
+        <input class="form-control" name="TYPE" value="${esc(data.TYPE||'')}" placeholder="คัดเลือกหลัก / เพิ่มเติม" />
       </div>
 
       <div class="form-group">
         <label>สังกัด</label>
-        <input class="form-control" name="AFFILIATION" value="${data.AFFILIATION||''}" />
+        <input class="form-control" name="AFFILIATION" value="${esc(data.AFFILIATION||'')}" />
       </div>
 
       <div class="form-group">
         <label>เขตสุขภาพ</label>
-        <input class="form-control" name="HEALTH_ZONE" type="number" value="${data.HEALTH_ZONE||''}" placeholder="1-13" />
+        <input class="form-control" name="HEALTH_ZONE" type="number" value="${esc(data.HEALTH_ZONE||'')}" placeholder="1-13" />
       </div>
 
       <div class="form-group">
         <label>HCODE</label>
-        <input class="form-control" name="HCODE" value="${data.HCODE||''}" />
+        <input class="form-control" name="HCODE" value="${esc(data.HCODE||'')}" />
       </div>
 
       <div class="form-group">
@@ -644,12 +675,12 @@ function buildForm(data = {}) {
 
       <div class="form-group">
         <label>จังหวัด</label>
-        <input class="form-control" name="PROVINCE" value="${data.PROVINCE||''}" />
+        <input class="form-control" name="PROVINCE" value="${esc(data.PROVINCE||'')}" />
       </div>
 
       <div class="form-group">
         <label>PACS</label>
-        <input class="form-control" name="PACS" value="${data.PACS||''}" list="pacs-list" />
+        <input class="form-control" name="PACS" value="${esc(data.PACS||'')}" list="pacs-list" />
         <datalist id="pacs-list">
           ${['JF','OREX','TGL','ThaiGL','Fuji','Philips','Meddream','PACSPLUS','BJC','Atom','Aztec','ABJ'].map(p=>`<option value="${p}">`).join('')}
         </datalist>
@@ -657,29 +688,29 @@ function buildForm(data = {}) {
 
       <div class="form-group">
         <label>Priority Group</label>
-        <input class="form-control" name="PRIORITY" value="${data.PRIORITY||''}" placeholder="A / B / C" />
+        <input class="form-control" name="PRIORITY" value="${esc(data.PRIORITY||'')}" placeholder="A / B / C" />
       </div>
 
       <div class="form-section">ผู้รับผิดชอบ</div>
 
       <div class="form-group">
         <label>Sales</label>
-        <input class="form-control" name="SALES" value="${data.SALES||''}" />
+        <input class="form-control" name="SALES" value="${esc(data.SALES||'')}" />
       </div>
 
       <div class="form-group">
         <label>ผู้ให้ข้อมูล (Contact)</label>
-        <input class="form-control" name="CONTACT" value="${data.CONTACT||''}" />
+        <input class="form-control" name="CONTACT" value="${esc(data.CONTACT||'')}" />
       </div>
 
       <div class="form-group">
         <label>เบอร์โทร</label>
-        <input class="form-control" name="PHONE" value="${data.PHONE||''}" />
+        <input class="form-control" name="PHONE" value="${esc(data.PHONE||'')}" />
       </div>
 
       <div class="form-group">
         <label>Email</label>
-        <input class="form-control" name="EMAIL" type="email" value="${data.EMAIL||''}" />
+        <input class="form-control" name="EMAIL" type="email" value="${esc(data.EMAIL||'')}" />
       </div>
 
       <div class="form-section">สถานะการดำเนินงาน</div>
@@ -693,22 +724,22 @@ function buildForm(data = {}) {
 
       <div class="form-group">
         <label>วันที่ส่งเครื่องไป</label>
-        <input class="form-control" name="SEND_DATE" type="date" value="${data.SEND_DATE||''}" />
+        <input class="form-control" name="SEND_DATE" type="date" value="${esc(data.SEND_DATE||'')}" />
       </div>
 
       <div class="form-group">
         <label>Golive Date</label>
-        <input class="form-control" name="GOLIVE" type="date" value="${data.GOLIVE||''}" />
+        <input class="form-control" name="GOLIVE" type="date" value="${esc(data.GOLIVE||'')}" />
       </div>
 
       <div class="form-group">
         <label>วันที่เริ่มสัญญา</label>
-        <input class="form-control" name="CONTRACT_START" type="date" value="${data.CONTRACT_START||''}" />
+        <input class="form-control" name="CONTRACT_START" type="date" value="${esc(data.CONTRACT_START||'')}" />
       </div>
 
       <div class="form-group">
         <label>วันที่สิ้นสุดสัญญา</label>
-        <input class="form-control" name="CONTRACT_END" type="date" value="${data.CONTRACT_END||''}" />
+        <input class="form-control" name="CONTRACT_END" type="date" value="${esc(data.CONTRACT_END||'')}" />
       </div>
 
       <div class="form-section">เอกสาร</div>
@@ -875,7 +906,7 @@ function openDetail(absIdx) {
   document.getElementById('detail-title').textContent = getCell(row,'HOSPITAL') || 'รายละเอียด';
 
   const d = (key, label) => {
-    const val = getCell(row, key) || '-';
+    const val = esc(getCell(row, key)) || '-';
     return `<div class="detail-item"><div class="detail-label">${label}</div><div class="detail-value">${val}</div></div>`;
   };
   const db = (key, label) => {
