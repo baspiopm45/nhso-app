@@ -236,6 +236,8 @@ function handleLogout() {
 function showApp() {
   document.getElementById('login-screen').classList.add('hidden');
   document.getElementById('app').classList.remove('hidden');
+  // ตั้ง state เริ่มต้นให้ history (หน้าแรก = dashboard)
+  history.replaceState({ page: 'dashboard' }, '', '#dashboard');
 }
 
 // ════════════════════════════════════════════
@@ -876,7 +878,7 @@ const PAGE_META = {
   add:        { title: 'เพิ่มรายการใหม่', breadcrumb: 'NHSO / เพิ่มรายการ' },
 };
 
-function navigateTo(pageName) {
+function navigateTo(pageName, pushHistory = true) {
   // ป้องกัน Viewer เข้าหน้าที่ไม่มีสิทธิ์
   if (isViewer() && ['hospitals', 'tracking', 'add'].includes(pageName)) {
     toast('⚠️ ไม่มีสิทธิ์เข้าถึงหน้านี้', 'warning');
@@ -891,6 +893,9 @@ function navigateTo(pageName) {
   const meta = PAGE_META[pageName] || {};
   document.getElementById('page-title').textContent = meta.title || pageName;
   document.getElementById('page-breadcrumb').textContent = meta.breadcrumb || '';
+
+  // บันทึกลง browser history → ปุ่ม Back/Forward ใช้งานได้
+  if (pushHistory) history.pushState({ page: pageName }, '', '#' + pageName);
 
   if (pageName === 'add') {
     document.getElementById('add-form-container').innerHTML = `
@@ -928,6 +933,11 @@ function navigateTo(pageName) {
 // nav clicks
 document.querySelectorAll('.nav-item').forEach(item => {
   item.addEventListener('click', () => navigateTo(item.dataset.page));
+});
+
+// browser Back/Forward → สลับหน้าในแอป (ไม่ push ซ้ำ)
+window.addEventListener('popstate', e => {
+  navigateTo(e.state?.page || 'dashboard', false);
 });
 
 // ─── Buttons ───────────────────────────────────────────────

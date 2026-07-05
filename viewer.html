@@ -525,7 +525,7 @@ function closeSidebar() {
 }
 
 /* ── NAVIGATION ── */
-function navigateTo(pageName) {
+function navigateTo(pageName, pushHistory = true) {
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
   document.getElementById('page-'+pageName)?.classList.add('active');
@@ -535,9 +535,16 @@ function navigateTo(pageName) {
     const bn=document.getElementById('bn-'+p);
     if(bn) bn.classList.toggle('active', p===pageName);
   });
+  // บันทึกลง browser history → ปุ่ม Back/Forward ใช้งานได้
+  if (pushHistory) history.pushState({page:pageName},'','#'+pageName);
   if (pageName==='hospitals') renderTable();
   closeSidebar();
 }
+
+// browser Back/Forward → สลับหน้าในแอป (ไม่ push ซ้ำ)
+window.addEventListener('popstate', e=>{
+  navigateTo(e.state?.page||'dashboard', false);
+});
 
 document.querySelectorAll('.nav-item').forEach(item=>{
   item.addEventListener('click',()=>navigateTo(item.dataset.page));
@@ -579,6 +586,8 @@ async function handleToken(response) {
   }
   document.getElementById('login-screen').classList.add('hidden');
   document.getElementById('app').classList.remove('hidden');
+  // ตั้ง state เริ่มต้นให้ history (หน้าแรก = dashboard)
+  history.replaceState({page:'dashboard'},'','#dashboard');
   await loadData();
 }
 
