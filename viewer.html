@@ -76,6 +76,7 @@
     .stat-icon.yellow { background:rgba(202,138,4,0.10); }
     .stat-icon.red    { background:rgba(220,38,38,0.10); }
     .stat-icon.indigo { background:rgba(99,102,241,0.12); }
+    .stat-icon.gray   { background:rgba(120,113,108,0.12); }
     .stat-info .value { font-size:26px; font-weight:800; line-height:1; }
     .stat-info .label { font-size:12px; color:var(--text-muted); margin-top:4px; }
 
@@ -333,6 +334,7 @@
         <div class="stat-card clickable" onclick="drillCard('progress')" title="คลิกเพื่อดูรายชื่อ รพ. ที่กำลังดำเนินการ"><div class="stat-icon yellow">🚚</div><div class="stat-info"><div class="value" id="stat-progress">—</div><div class="label">กำลังดำเนินการ</div></div></div>
         <div class="stat-card clickable" onclick="drillCard('contract')" title="คลิกเพื่อดูรายชื่อ รพ. ที่อยู่ระหว่างทำสัญญา"><div class="stat-icon indigo">📝</div><div class="stat-info"><div class="value" id="stat-contract">—</div><div class="label">อยู่ระหว่างทำสัญญา</div></div></div>
         <div class="stat-card clickable" onclick="drillCard('waiting')" title="คลิกเพื่อดูรายชื่อ รพ. ที่รอดำเนินการ"><div class="stat-icon red">⏳</div><div class="stat-info"><div class="value" id="stat-waiting">—</div><div class="label">รอดำเนินการ</div></div></div>
+        <div class="stat-card clickable hidden" id="vcard-other" onclick="drillCard('other')" title="มีสถานะใหม่ที่ยังไม่ถูกจัดกลุ่ม — คลิกเพื่อดูรายชื่อ"><div class="stat-icon gray">❓</div><div class="stat-info"><div class="value" id="stat-other">—</div><div class="label">สถานะอื่นๆ</div></div></div>
       </div>
       <div class="charts-grid" style="margin-bottom:20px;">
         <div class="card">
@@ -351,7 +353,7 @@
         </div>
         <div class="legend">
           <div class="legend-item"><div class="legend-dot" style="background:#FC8181"></div> ยังไม่เริ่ม / รอ</div>
-          <div class="legend-item"><div class="legend-dot" style="background:#F59E0B"></div> กำลังดำเนินการ / ทำสัญญา</div>
+          <div class="legend-item"><div class="legend-dot" style="background:#F59E0B"></div> กำลังดำเนินการ / ทำสัญญา / อื่นๆ</div>
           <div class="legend-item"><div class="legend-dot" style="background:#16A34A"></div> Golive แล้ว</div>
         </div>
         <div class="stacked-chart" id="chart-zone"><div class="loading-wrap"><div class="spinner"></div></div></div>
@@ -477,16 +479,21 @@ function vcDisplayStatus(r) {
   return s;
 }
 
-/* ── STAT CARD GROUPS (นิยามกลาง: dashboard + drill-down ใช้ชุดเดียวกัน, mirror admin) ── */
-const V_PROGRESS=['Machine in Transit','In process config network with IT','Ready for Training'];
-const V_WAITING=['Waiting for Integrate with PACS','Waiting for Swaping','Ready for Sending Waiting for address','-',''];
-// B3: สถานะที่ขึ้นต้นด้วย "Lived" ทั้งหมดถือว่า Golive แล้ว (เช่น Lived and Re-Check)
-const vcIsLived=s=>String(s).trim().startsWith('Lived');
+/* ── STAT CARD GROUPS — R2: นิยามมาจาก CONFIG.STATUS_GROUPS (config.js) แก้ที่เดียว ใช้ทั้ง 2 แอป ── */
+const V_PROGRESS=CONFIG.STATUS_GROUPS.PROGRESS;
+const V_WAITING=CONFIG.STATUS_GROUPS.WAITING;
+// B3: สถานะที่ขึ้นต้นด้วย LIVED_PREFIX ทั้งหมดถือว่า Golive แล้ว (เช่น Lived and Re-Check)
+const vcIsLived=s=>String(s).trim().startsWith(CONFIG.STATUS_GROUPS.LIVED_PREFIX);
 const V_CARDS={
   lived:    {label:'Golive แล้ว',       test:r=>vcIsLived(vcGet(r,'STATUS'))},
   progress: {label:'กำลังดำเนินการ',     test:r=>V_PROGRESS.includes(vcGet(r,'STATUS'))},
   contract: {label:'อยู่ระหว่างทำสัญญา', test:r=>vcDisplayStatus(r)==='Contract in progress'},
   waiting:  {label:'รอดำเนินการ',        test:r=>V_WAITING.includes(vcGet(r,'STATUS'))&&vcDisplayStatus(r)!=='Contract in progress'},
+  // R3: สถานะที่ไม่เข้ากลุ่มไหนเลย — การ์ดโชว์เฉพาะเมื่อมี
+  other:    {label:'สถานะอื่นๆ',         test:r=>{
+    const s=vcGet(r,'STATUS');
+    return String(s).trim()!==''&&s!=='-'&&s!=='Contract in progress'&&!vcIsLived(s)&&!V_PROGRESS.includes(s)&&!V_WAITING.includes(s);
+  }},
 };
 
 /* ── DRILL CARD: คลิก stat card → หน้า รายการ รพ. พร้อมกรองตามกลุ่ม ── */
@@ -629,19 +636,23 @@ function renderDashboard() {
   const isProgress=V_CARDS.progress.test;
   const isContract=V_CARDS.contract.test;
   const isWaiting=V_CARDS.waiting.test;
-  const total=rows.length, lived=rows.filter(isLived).length, progress=rows.filter(isProgress).length, contract=rows.filter(isContract).length, waiting=rows.filter(isWaiting).length;
+  const isOther=V_CARDS.other.test;
+  const total=rows.length, lived=rows.filter(isLived).length, progress=rows.filter(isProgress).length, contract=rows.filter(isContract).length, waiting=rows.filter(isWaiting).length, other=rows.filter(isOther).length;
   document.getElementById('stat-total').textContent=total.toLocaleString();
   document.getElementById('stat-lived').textContent=lived.toLocaleString();
   document.getElementById('stat-progress').textContent=progress.toLocaleString();
   document.getElementById('stat-contract').textContent=contract.toLocaleString();
   document.getElementById('stat-waiting').textContent=waiting.toLocaleString();
-  renderGolivePct(total,lived,progress,contract,waiting);
+  // R3: การ์ด "สถานะอื่นๆ" โชว์เฉพาะเมื่อมีสถานะไม่รู้จัก
+  document.getElementById('stat-other').textContent=other.toLocaleString();
+  document.getElementById('vcard-other')?.classList.toggle('hidden', other===0);
+  renderGolivePct(total,lived,progress,contract,waiting,other);
   renderStatusChart(rows);
-  renderZoneChart(rows,isLived,isProgress,isContract);
+  renderZoneChart(rows,isLived,isProgress,isContract,isOther);
   renderPhaseChart(rows);
 }
 
-function renderGolivePct(total,lived,progress,contract,waiting) {
+function renderGolivePct(total,lived,progress,contract,waiting,other=0) {
   const pct=total>0?Math.round(lived/total*100):0;
   const r=32,c=40,circ=2*Math.PI*r,offset=circ-(pct/100)*circ;
   document.getElementById('golive-progress').innerHTML=`
@@ -658,6 +669,7 @@ function renderGolivePct(total,lived,progress,contract,waiting) {
         <div class="pl-row"><span class="pl-label">🚚 กำลังดำเนินการ</span><span class="pl-val" style="color:#CA8A04">${progress.toLocaleString()}</span></div>
         <div class="pl-row"><span class="pl-label">📝 อยู่ระหว่างทำสัญญา</span><span class="pl-val" style="color:#4F46E5">${contract.toLocaleString()}</span></div>
         <div class="pl-row"><span class="pl-label">⏳ ยังไม่เริ่ม</span><span class="pl-val" style="color:#DC2626">${waiting.toLocaleString()}</span></div>
+        ${other>0?`<div class="pl-row"><span class="pl-label">❓ สถานะอื่นๆ</span><span class="pl-val" style="color:#78716C">${other.toLocaleString()}</span></div>`:''}
         <div class="pl-row" style="margin-top:4px;padding-top:6px;border-top:1px solid #F0EBE3"><span class="pl-label">รวม</span><span class="pl-val">${total.toLocaleString()} แห่ง</span></div>
       </div>
     </div>`;
@@ -678,14 +690,14 @@ function renderStatusChart(rows) {
     </div>`).join('');
 }
 
-function renderZoneChart(rows,isLived,isProgress,isContract) {
+function renderZoneChart(rows,isLived,isProgress,isContract,isOther) {
   const zones={};
   rows.forEach(r=>{
     const z=vcGet(r,'HEALTH_ZONE');if(!z)return;
     if(!zones[z])zones[z]={lived:0,progress:0,waiting:0,total:0};
     zones[z].total++;
     if(isLived(r))zones[z].lived++;
-    else if(isProgress(r)||isContract(r))zones[z].progress++;  // รวมทำสัญญาเข้าแถบกำลังดำเนินการ
+    else if(isProgress(r)||isContract(r)||isOther(r))zones[z].progress++;  // รวมทำสัญญา+สถานะอื่นๆ เข้าแถบเหลือง (มีความเคลื่อนไหว ไม่ใช่ "รอ")
     else zones[z].waiting++;
   });
   const sorted=Object.entries(zones).sort((a,b)=>parseFloat(a[0])-parseFloat(b[0]));

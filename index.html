@@ -135,6 +135,14 @@
             <div class="label">ชำระแล้ว</div>
           </div>
         </div>
+        <!-- R3: โชว์เฉพาะเมื่อมีสถานะที่ไม่เข้ากลุ่มไหนเลย (เตือนให้ไปจัดกลุ่มใน config.js) -->
+        <div class="stat-card clickable hidden" id="card-other" onclick="drillCard('other')" title="มีสถานะใหม่ใน Sheet ที่ยังไม่ถูกจัดกลุ่ม — คลิกเพื่อดูรายชื่อ">
+          <div class="stat-icon gray">❓</div>
+          <div class="stat-info">
+            <div class="value" id="stat-other">-</div>
+            <div class="label">สถานะอื่นๆ (ยังไม่จัดกลุ่ม)</div>
+          </div>
+        </div>
       </div>
 
       <!-- Charts -->

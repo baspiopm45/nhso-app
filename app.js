@@ -118,13 +118,13 @@ function boolIcon(val) {
   return '<span class="text-gray">-</span>';
 }
 
-// ─── Stat card groups (นิยามกลาง: dashboard + drill-down ใช้ชุดเดียวกัน) ───
-const PROGRESS_STATUSES = ['Machine in Transit','In process config network with IT','Ready for Training'];
-const WAITING_STATUSES  = ['Waiting for Integrate with PACS','Waiting for Swaping','Ready for Sending Waiting for address','-',''];
+// ─── Stat card groups ───
+// R2: นิยามกลุ่มมาจาก CONFIG.STATUS_GROUPS (config.js) — แก้ที่เดียว ใช้ทั้ง admin/viewer
+const PROGRESS_STATUSES = CONFIG.STATUS_GROUPS.PROGRESS;
+const WAITING_STATUSES  = CONFIG.STATUS_GROUPS.WAITING;
 
-// B3: สถานะที่ขึ้นต้นด้วย "Lived" ทั้งหมดถือว่า Golive แล้ว
-// (ครอบคลุม "Lived and Re-Check…" และ variant อื่นในอนาคต)
-const isLivedStatus = s => String(s).trim().startsWith('Lived');
+// B3: สถานะที่ขึ้นต้นด้วย LIVED_PREFIX ทั้งหมดถือว่า Golive แล้ว
+const isLivedStatus = s => String(s).trim().startsWith(CONFIG.STATUS_GROUPS.LIVED_PREFIX);
 
 const CARD_FILTERS = {
   lived:    { label: 'Golive แล้ว',       test: r => isLivedStatus(getCell(r,'STATUS')) },
@@ -132,6 +132,12 @@ const CARD_FILTERS = {
   contract: { label: 'อยู่ระหว่างทำสัญญา', test: r => displayStatus(r) === 'Contract in progress' },
   waiting:  { label: 'รอดำเนินการ',        test: r => WAITING_STATUSES.includes(getCell(r,'STATUS')) && displayStatus(r) !== 'Contract in progress' },
   paid:     { label: 'ชำระแล้ว',           test: r => isTruthy(getCell(r,'PAID')) },
+  // R3: สถานะที่ไม่เข้ากลุ่มไหนเลย — การ์ดโชว์เฉพาะเมื่อมี (>0) เพื่อเตือนว่ามีสถานะใหม่ต้องจัดกลุ่ม
+  other:    { label: 'สถานะอื่นๆ',         test: r => {
+    const s = getCell(r,'STATUS');
+    return String(s).trim() !== '' && s !== '-' && s !== 'Contract in progress'
+      && !isLivedStatus(s) && !PROGRESS_STATUSES.includes(s) && !WAITING_STATUSES.includes(s);
+  }},
 };
 
 // คลิก stat card → ไปหน้า รายการโรงพยาบาล พร้อมกรองตามกลุ่มของการ์ด
@@ -408,6 +414,7 @@ function renderDashboard() {
   const contract = rows.filter(CARD_FILTERS.contract.test).length;
   const waiting  = rows.filter(CARD_FILTERS.waiting.test).length;
   const paid     = rows.filter(CARD_FILTERS.paid.test).length;
+  const other    = rows.filter(CARD_FILTERS.other.test).length;
 
   document.getElementById('stat-total').textContent    = total;
   document.getElementById('stat-lived').textContent    = lived;
@@ -415,6 +422,10 @@ function renderDashboard() {
   document.getElementById('stat-contract').textContent = contract;
   document.getElementById('stat-waiting').textContent  = waiting;
   document.getElementById('stat-paid').textContent     = paid;
+
+  // R3: การ์ด "สถานะอื่นๆ" โชว์เฉพาะเมื่อมีสถานะไม่รู้จักใน Sheet
+  document.getElementById('stat-other').textContent = other;
+  document.getElementById('card-other')?.classList.toggle('hidden', other === 0);
 
   // Status chart
   const statusCount = {};

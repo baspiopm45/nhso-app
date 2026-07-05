@@ -58,6 +58,25 @@ const CONFIG = {
     DELIVERY_ACK: 'ได้ใบตอบรับการส่งมอบ',
   },
 
+  // ─── Status Groups (R2: นิยามกลาง — admin (app.js) และ viewer (viewer.html) ใช้ชุดเดียวกัน) ───
+  // แก้การจัดกลุ่มสถานะที่นี่ที่เดียว ห้ามไปแก้ list ในแอปแยกกัน
+  STATUS_GROUPS: {
+    LIVED_PREFIX: 'Lived',   // สถานะที่ขึ้นต้นด้วยคำนี้ = Golive แล้ว (รวม "Lived and Re-Check…")
+    PROGRESS: [
+      'Machine in Transit',
+      'In process config network with IT',
+      'Ready for Training',
+    ],
+    WAITING: [
+      'Waiting for Integrate with PACS',
+      'Waiting for Swaping',
+      'Ready for Sending Waiting for address',
+      '-',
+      '',
+    ],
+    // สถานะที่ไม่เข้ากลุ่มไหนเลย → การ์ด "สถานะอื่นๆ" (R3) จะโชว์อัตโนมัติ
+  },
+
   // Status options
   STATUS_OPTIONS: [
     '-',

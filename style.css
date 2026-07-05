@@ -366,6 +366,7 @@ input, select, textarea { font-family: inherit; }
 .stat-icon.red    { background: #fee2e2; }
 .stat-icon.purple { background: #ede9fe; }
 .stat-icon.indigo { background: #e0e7ff; }
+.stat-icon.gray   { background: #f3f4f6; }
 
 .stat-info .value {
   font-size: 1.8rem;
