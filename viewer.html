@@ -539,8 +539,8 @@ function navigateTo(pageName, pushHistory = true) {
     const bn=document.getElementById('bn-'+p);
     if(bn) bn.classList.toggle('active', p===pageName);
   });
-  // บันทึกลง browser history → ปุ่ม Back/Forward ใช้งานได้
-  if (pushHistory) history.pushState({page:pageName},'','#'+pageName);
+  // บันทึกลง browser history → ปุ่ม Back/Forward ใช้งานได้ (B12: หน้าเดิมไม่ push ซ้ำ)
+  if (pushHistory && history.state?.page !== pageName) history.pushState({page:pageName},'','#'+pageName);
   if (pageName==='hospitals') renderTable();
   closeSidebar();
 }
@@ -605,7 +605,7 @@ function handleLogout() {
 /* ── DATA ── */
 async function loadData() {
   try {
-    const url=`https://sheets.googleapis.com/v4/spreadsheets/${VIEWER_SHEET_ID}/values/${encodeURIComponent(VIEWER_SHEET_NAME+'!A1:X2000')}?valueRenderOption=FORMATTED_VALUE`;
+    const url=`https://sheets.googleapis.com/v4/spreadsheets/${VIEWER_SHEET_ID}/values/${encodeURIComponent(VIEWER_SHEET_NAME+'!A:X')}?valueRenderOption=FORMATTED_VALUE`;   /* B9: ไม่จำกัดจำนวนแถว */
     const res=await fetch(url,{headers:{Authorization:`Bearer ${VS.accessToken}`}});
     if(!res.ok) throw new Error('Sheets API error');
     const data=await res.json();

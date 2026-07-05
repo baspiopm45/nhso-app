@@ -131,7 +131,7 @@ const CARD_FILTERS = {
   transit:  { label: 'กำลังดำเนินการ',     test: r => PROGRESS_STATUSES.includes(getCell(r,'STATUS')) },
   contract: { label: 'อยู่ระหว่างทำสัญญา', test: r => displayStatus(r) === 'Contract in progress' },
   waiting:  { label: 'รอดำเนินการ',        test: r => WAITING_STATUSES.includes(getCell(r,'STATUS')) && displayStatus(r) !== 'Contract in progress' },
-  paid:     { label: 'ชำระแล้ว',           test: r => getCell(r,'PAID').toLowerCase() === 'true' },
+  paid:     { label: 'ชำระแล้ว',           test: r => isTruthy(getCell(r,'PAID')) },
 };
 
 // คลิก stat card → ไปหน้า รายการโรงพยาบาล พร้อมกรองตามกลุ่มของการ์ด
@@ -273,44 +273,74 @@ function showApp() {
 // ════════════════════════════════════════════
 // GOOGLE SHEETS API
 // ════════════════════════════════════════════
+// B8: access token ของ GIS หมดอายุ ~1 ชม. → ขอ token ใหม่แบบเงียบ (ไม่เด้ง consent ถ้า session ยังอยู่)
+function refreshTokenSilent() {
+  return new Promise((resolve, reject) => {
+    if (!STATE.tokenClient) return reject(new Error('no token client'));
+    const prevCallback = STATE.tokenClient.callback;
+    STATE.tokenClient.callback = (resp) => {
+      STATE.tokenClient.callback = prevCallback;
+      if (resp.error) { reject(new Error(resp.error)); return; }
+      STATE.accessToken = resp.access_token;
+      resolve();
+    };
+    STATE.tokenClient.requestAccessToken({ prompt: '' });
+  });
+}
+
+// ทุก request วิ่งผ่านตัวนี้ — เจอ 401 (token หมดอายุ) → refresh แล้ว retry 1 ครั้ง
+async function sheetsFetch(url, options = {}) {
+  const doFetch = () => fetch(url, {
+    ...options,
+    headers: { ...(options.headers || {}), Authorization: `Bearer ${STATE.accessToken}` },
+  });
+  let res = await doFetch();
+  if (res.status === 401) {
+    try { await refreshTokenSilent(); }
+    catch { throw new Error('เซสชันหมดอายุ — กรุณาออกจากระบบแล้ว login ใหม่'); }
+    res = await doFetch();
+  }
+  return res;
+}
+
+async function sheetsError(res, fallback) {
+  const err = await res.json().catch(() => ({}));
+  return new Error(err.error?.message || fallback);
+}
+
 async function sheetsGet(range) {
   const url = `https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.SPREADSHEET_ID}/values/${encodeURIComponent(range)}?valueRenderOption=FORMATTED_VALUE`;
-  const res = await fetch(url, {
-    headers: { Authorization: `Bearer ${STATE.accessToken}` }
-  });
-  if (!res.ok) {
-    const err = await res.json();
-    throw new Error(err.error?.message || 'Sheets API error');
-  }
+  const res = await sheetsFetch(url);
+  if (!res.ok) throw await sheetsError(res, 'Sheets API error');
   return res.json();
 }
 
 async function sheetsAppend(range, values) {
   const url = `https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.SPREADSHEET_ID}/values/${encodeURIComponent(range)}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`;
-  const res = await fetch(url, {
+  const res = await sheetsFetch(url, {
     method:  'POST',
-    headers: { Authorization: `Bearer ${STATE.accessToken}`, 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json' },
     body:    JSON.stringify({ values }),
   });
-  if (!res.ok) throw new Error('Append failed');
+  if (!res.ok) throw await sheetsError(res, 'Append failed');
   return res.json();
 }
 
 async function sheetsUpdate(range, values) {
   const url = `https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.SPREADSHEET_ID}/values/${encodeURIComponent(range)}?valueInputOption=USER_ENTERED`;
-  const res = await fetch(url, {
+  const res = await sheetsFetch(url, {
     method:  'PUT',
-    headers: { Authorization: `Bearer ${STATE.accessToken}`, 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json' },
     body:    JSON.stringify({ values }),
   });
-  if (!res.ok) throw new Error('Update failed');
+  if (!res.ok) throw await sheetsError(res, 'Update failed');
   return res.json();
 }
 
 async function loadSheetData() {
   document.getElementById('sync-text').textContent = 'กำลังโหลด...';
   try {
-    const range = `${CONFIG.SHEET_NAME}!A1:X1000`;
+    const range = `${CONFIG.SHEET_NAME}!A:X`;   // B9: ไม่จำกัดจำนวนแถว (API คืนถึงแถวสุดท้ายที่มีข้อมูล)
     const data  = await sheetsGet(range);
     const all   = data.values || [];
 
@@ -343,6 +373,14 @@ async function loadSheetData() {
 
     const salesList = [...new Set(STATE.rows.map(r => getCell(r, 'SALES')))].filter(Boolean).sort();
     fillSelect('filter-sales', salesList, s => s);
+
+    // B10: ตัวกรองสถานะสร้างจากข้อมูลจริง (สถานะใหม่ใน Sheet โผล่อัตโนมัติ)
+    // เรียง: กลุ่ม Lived ก่อน → สถานะอื่น → '-' ท้ายสุด
+    const statuses = [...new Set(STATE.rows.map(r => displayStatus(r) || '-'))];
+    const stLived  = statuses.filter(isLivedStatus).sort();
+    const stOthers = statuses.filter(s => s !== '-' && !isLivedStatus(s)).sort();
+    const stDash   = statuses.includes('-') ? ['-'] : [];
+    fillSelect('filter-status', [...stLived, ...stOthers, ...stDash], s => s);
 
     applyFilters();
     renderDashboard();
@@ -452,7 +490,7 @@ function applyFilters() {
 
     if (search && !hosp.includes(search) && !prov.includes(search) && !hcode.includes(search)) return false;
     if (phase  && p !== phase)   return false;
-    if (status && s !== status)  return false;
+    if (status && (s || '-') !== status) return false;   // สถานะว่างนับเป็น '-'
     if (zone   && z !== zone)    return false;
     if (sales  && sl !== sales)  return false;
     if (STATE.cardFilter && !CARD_FILTERS[STATE.cardFilter].test(row)) return false;
@@ -746,28 +784,28 @@ function buildForm(data = {}) {
 
       <div class="form-group">
         <div class="checkbox-group">
-          <input type="checkbox" name="SALES_DOC" id="chk-sales-doc" ${data.SALES_DOC===true||data.SALES_DOC==='TRUE'?'checked':''} />
+          <input type="checkbox" name="SALES_DOC" id="chk-sales-doc" ${isTruthy(data.SALES_DOC)?'checked':''} />
           <label for="chk-sales-doc">Sales Doc</label>
         </div>
       </div>
 
       <div class="form-group">
         <div class="checkbox-group">
-          <input type="checkbox" name="CONTRACT_DOC" id="chk-contract-doc" ${data.CONTRACT_DOC===true||data.CONTRACT_DOC==='TRUE'?'checked':''} />
+          <input type="checkbox" name="CONTRACT_DOC" id="chk-contract-doc" ${isTruthy(data.CONTRACT_DOC)?'checked':''} />
           <label for="chk-contract-doc">Contract Doc</label>
         </div>
       </div>
 
       <div class="form-group">
         <div class="checkbox-group">
-          <input type="checkbox" name="PAID" id="chk-paid" ${data.PAID===true||data.PAID==='TRUE'?'checked':''} />
+          <input type="checkbox" name="PAID" id="chk-paid" ${isTruthy(data.PAID)?'checked':''} />
           <label for="chk-paid">Paid?</label>
         </div>
       </div>
 
       <div class="form-group">
         <div class="checkbox-group">
-          <input type="checkbox" name="DELIVERY_ACK" id="chk-delivery" ${data.DELIVERY_ACK===true||data.DELIVERY_ACK==='TRUE'?'checked':''} />
+          <input type="checkbox" name="DELIVERY_ACK" id="chk-delivery" ${isTruthy(data.DELIVERY_ACK)?'checked':''} />
           <label for="chk-delivery">ได้ใบตอบรับการส่งมอบ</label>
         </div>
       </div>
@@ -818,7 +856,7 @@ function locateRow(rows, original) {
 
 async function relocateEditRow(localIndex) {
   const original = STATE.rows[localIndex];
-  const fresh = await sheetsGet(`${CONFIG.SHEET_NAME}!A1:X2000`);
+  const fresh = await sheetsGet(`${CONFIG.SHEET_NAME}!A:X`);
   const all = fresh.values || [];
   if (JSON.stringify(all[0] || []) !== JSON.stringify(STATE.headers)) {
     throw new Error('โครงสร้างคอลัมน์ใน Sheet เปลี่ยนไป — กดรีเฟรชแล้วลองใหม่');
@@ -974,7 +1012,10 @@ function navigateTo(pageName, pushHistory = true) {
   document.getElementById('page-breadcrumb').textContent = meta.breadcrumb || '';
 
   // บันทึกลง browser history → ปุ่ม Back/Forward ใช้งานได้
-  if (pushHistory) history.pushState({ page: pageName }, '', '#' + pageName);
+  // B12: หน้าเดิมไม่ push ซ้ำ (กดเมนูเดิมรัวๆ แล้วต้องกด Back หลายที)
+  if (pushHistory && history.state?.page !== pageName) {
+    history.pushState({ page: pageName }, '', '#' + pageName);
+  }
 
   if (pageName === 'add') {
     document.getElementById('add-form-container').innerHTML = `
