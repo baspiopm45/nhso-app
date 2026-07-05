@@ -478,8 +478,10 @@ function vcDisplayStatus(r) {
 /* ── STAT CARD GROUPS (นิยามกลาง: dashboard + drill-down ใช้ชุดเดียวกัน, mirror admin) ── */
 const V_PROGRESS=['Machine in Transit','In process config network with IT','Ready for Training'];
 const V_WAITING=['Waiting for Integrate with PACS','Waiting for Swaping','Ready for Sending Waiting for address','-',''];
+// B3: สถานะที่ขึ้นต้นด้วย "Lived" ทั้งหมดถือว่า Golive แล้ว (เช่น Lived and Re-Check)
+const vcIsLived=s=>String(s).trim().startsWith('Lived');
 const V_CARDS={
-  lived:    {label:'Golive แล้ว',       test:r=>vcGet(r,'STATUS')==='Lived'},
+  lived:    {label:'Golive แล้ว',       test:r=>vcIsLived(vcGet(r,'STATUS'))},
   progress: {label:'กำลังดำเนินการ',     test:r=>V_PROGRESS.includes(vcGet(r,'STATUS'))},
   contract: {label:'อยู่ระหว่างทำสัญญา', test:r=>vcDisplayStatus(r)==='Contract in progress'},
   waiting:  {label:'รอดำเนินการ',        test:r=>V_WAITING.includes(vcGet(r,'STATUS'))&&vcDisplayStatus(r)!=='Contract in progress'},
@@ -669,7 +671,7 @@ function renderStatusChart(rows) {
   document.getElementById('chart-status').innerHTML=sorted.map(([s,n])=>`
     <div class="bar-row">
       <div class="bar-label" title="${s}">${short[s]||s}</div>
-      <div class="bar-track"><div class="bar-fill" style="width:${(n/max*100).toFixed(1)}%;background:${colors[s]||'#CC785C'}"></div></div>
+      <div class="bar-track"><div class="bar-fill" style="width:${(n/max*100).toFixed(1)}%;background:${colors[s]||(vcIsLived(s)?'#16A34A':'#CC785C')}"></div></div>
       <div class="bar-num">${n}</div>
     </div>`).join('');
 }
@@ -771,7 +773,7 @@ function populateStatusFilter() {
 }
 
 function statusBadge(s) {
-  if(s==='Lived') return `<span class="badge badge-lived">Lived</span>`;
+  if(vcIsLived(s)) return `<span class="badge badge-lived">${s==='Lived'?'Lived':(s.length>16?s.substring(0,14)+'…':s)}</span>`;
   if(s==='Contract in progress') return `<span class="badge badge-contract">Contract</span>`;
   if(s==='-'||!s) return `<span class="badge badge-waiting">—</span>`;
   if(s.includes('Transit')) return `<span class="badge badge-transit">In Transit</span>`;

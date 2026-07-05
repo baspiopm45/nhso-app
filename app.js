@@ -58,7 +58,8 @@ function statusBadge(status) {
     'Waiting for Swaping':                   'badge-waiting',
     'Ready for Sending Waiting for address': 'badge-ready',
   };
-  const cls = map[status] || 'badge-default';
+  // สถานะ "Lived …" ที่ไม่อยู่ใน map (เช่น Lived and Re-Check) → badge เขียวเหมือน Lived
+  const cls = map[status] || (String(status).trim().startsWith('Lived') ? 'badge-lived' : 'badge-default');
   const short = {
     'Contract in progress': 'Contract',
     'Ready for Training': 'Ready Train',
@@ -96,8 +97,12 @@ function boolIcon(val) {
 const PROGRESS_STATUSES = ['Machine in Transit','In process config network with IT','Ready for Training'];
 const WAITING_STATUSES  = ['Waiting for Integrate with PACS','Waiting for Swaping','Ready for Sending Waiting for address','-',''];
 
+// B3: สถานะที่ขึ้นต้นด้วย "Lived" ทั้งหมดถือว่า Golive แล้ว
+// (ครอบคลุม "Lived and Re-Check…" และ variant อื่นในอนาคต)
+const isLivedStatus = s => String(s).trim().startsWith('Lived');
+
 const CARD_FILTERS = {
-  lived:    { label: 'Golive แล้ว',       test: r => getCell(r,'STATUS') === 'Lived' },
+  lived:    { label: 'Golive แล้ว',       test: r => isLivedStatus(getCell(r,'STATUS')) },
   transit:  { label: 'กำลังดำเนินการ',     test: r => PROGRESS_STATUSES.includes(getCell(r,'STATUS')) },
   contract: { label: 'อยู่ระหว่างทำสัญญา', test: r => displayStatus(r) === 'Contract in progress' },
   waiting:  { label: 'รอดำเนินการ',        test: r => WAITING_STATUSES.includes(getCell(r,'STATUS')) && displayStatus(r) !== 'Contract in progress' },
