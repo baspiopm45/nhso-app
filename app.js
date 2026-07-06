@@ -79,7 +79,7 @@ function statusBadge(status) {
     'Ready for Training':                    'badge-training',
     'Machine in Transit':                    'badge-transit',
     'In process config network with IT':     'badge-process',
-    'Waiting for Integrate with PACS':       'badge-waiting',
+    'Waiting for Integrate with PACS':       'badge-transit',   // อยู่กลุ่มกำลังดำเนินการ → โทนเหลือง
     'Waiting for Swaping':                   'badge-waiting',
     'Ready for Sending Waiting for address': 'badge-ready',
   };

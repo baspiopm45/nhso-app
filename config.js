@@ -66,11 +66,11 @@ const CONFIG = {
       'Machine in Transit',
       'In process config network with IT',
       'Ready for Training',
+      'Waiting for Integrate with PACS',        // มีเครื่อง/กำลัง integrate = งานเดินอยู่
+      'Ready for Sending Waiting for address',  // เตรียมส่งแล้ว = งานเดินอยู่
     ],
     WAITING: [
-      'Waiting for Integrate with PACS',
       'Waiting for Swaping',
-      'Ready for Sending Waiting for address',
       '-',
       '',
     ],
