@@ -102,12 +102,18 @@ function isTruthy(val) {
   return v === 'true' || v === 'yes' || v === '1';
 }
 
-// สถานะสำหรับแสดงผล: ถ้ายังไม่มี Implement Status จริง แต่ Sales Doc = TRUE
+// Sales Doc เป็นข้อความ 3 ค่า (Completed / In progress / Not started) จาก XLOOKUP tab Doc tracking
+// ค่าที่นับว่า "เริ่มทำเอกสารขายแล้ว" กำหนดใน CONFIG.STATUS_GROUPS.SALES_DOC_ACTIVE (รวม TRUE เดิมช่วง migrate)
+function salesDocActive(v) {
+  return CONFIG.STATUS_GROUPS.SALES_DOC_ACTIVE.includes(String(v).trim().toLowerCase());
+}
+
+// สถานะสำหรับแสดงผล: ถ้ายังไม่มี Implement Status จริง แต่เริ่มทำเอกสารขายแล้ว
 // → แสดง "Contract in progress" (อยู่ระหว่างทำสัญญา)
 function displayStatus(row) {
   const s = getCell(row, 'STATUS');
   if (s && s !== '-') return s;                       // มีสถานะติดตั้งจริงแล้ว → คงไว้
-  if (isTruthy(getCell(row, 'SALES_DOC'))) return 'Contract in progress';
+  if (salesDocActive(getCell(row, 'SALES_DOC'))) return 'Contract in progress';
   return s;
 }
 
@@ -118,6 +124,15 @@ function boolIcon(val) {
   return '<span class="text-gray">-</span>';
 }
 
+// chip สำหรับ Sales Doc 3 ค่า (Completed / In progress / Not started) — fallback ✔/✗ สำหรับ TRUE/FALSE เดิม
+function salesDocChip(val) {
+  const l = String(val ?? '').trim().toLowerCase();
+  if (l === 'completed')   return '<span class="badge badge-lived">Completed</span>';
+  if (l === 'in progress') return '<span class="badge badge-training">In progress</span>';
+  if (l === 'not started') return '<span class="badge badge-default">Not started</span>';
+  return boolIcon(val);
+}
+
 // ─── Stat card groups ───
 // R2: นิยามกลุ่มมาจาก CONFIG.STATUS_GROUPS (config.js) — แก้ที่เดียว ใช้ทั้ง admin/viewer
 const PROGRESS_STATUSES = CONFIG.STATUS_GROUPS.PROGRESS;
@@ -125,6 +140,7 @@ const WAITING_STATUSES  = CONFIG.STATUS_GROUPS.WAITING;
 
 // B3: สถานะที่ขึ้นต้นด้วย LIVED_PREFIX ทั้งหมดถือว่า Golive แล้ว
 const isLivedStatus = s => String(s).trim().startsWith(CONFIG.STATUS_GROUPS.LIVED_PREFIX);
+const isWaivedStatus = s => CONFIG.STATUS_GROUPS.WAIVED.includes(String(s).trim());
 
 const CARD_FILTERS = {
   lived:    { label: 'Golive แล้ว',       test: r => isLivedStatus(getCell(r,'STATUS')) },
@@ -132,12 +148,18 @@ const CARD_FILTERS = {
   contract: { label: 'อยู่ระหว่างทำสัญญา', test: r => displayStatus(r) === 'Contract in progress' },
   waiting:  { label: 'รอดำเนินการ',        test: r => WAITING_STATUSES.includes(getCell(r,'STATUS')) && displayStatus(r) !== 'Contract in progress' },
   paid:     { label: 'ชำระแล้ว',           test: r => isTruthy(getCell(r,'PAID')) },
+  // รพ. สละสิทธิ์ — กลุ่มแยก คงอยู่ในฐานจำนวนรวม การ์ดโชว์เฉพาะเมื่อมี
+  waived:   { label: 'สละสิทธิ์',          test: r => isWaivedStatus(getCell(r,'STATUS')) },
   // R3: สถานะที่ไม่เข้ากลุ่มไหนเลย — การ์ดโชว์เฉพาะเมื่อมี (>0) เพื่อเตือนว่ามีสถานะใหม่ต้องจัดกลุ่ม
   other:    { label: 'สถานะอื่นๆ',         test: r => {
     const s = getCell(r,'STATUS');
     return String(s).trim() !== '' && s !== '-' && s !== 'Contract in progress'
-      && !isLivedStatus(s) && !PROGRESS_STATUSES.includes(s) && !WAITING_STATUSES.includes(s);
+      && !isLivedStatus(s) && !isWaivedStatus(s)
+      && !PROGRESS_STATUSES.includes(s) && !WAITING_STATUSES.includes(s);
   }},
+  // มิติการเงิน (ใช้ใน Paid dashboard รายเขต — ไม่ใช่ partition เดียวกับสถานะติดตั้ง)
+  popending: { label: 'ได้ PO รอออกเช็ค', test: r => isTruthy(getCell(r,'CONTRACT_DOC')) && !isTruthy(getCell(r,'PAID')) },
+  nopo:      { label: 'ยังไม่ได้ PO',      test: r => !isTruthy(getCell(r,'CONTRACT_DOC')) && !isTruthy(getCell(r,'PAID')) },
 };
 
 // คลิก stat card → ไปหน้า รายการโรงพยาบาล พร้อมกรองตามกลุ่มของการ์ด
@@ -159,6 +181,64 @@ function clearCardFilter() {
   STATE.cardFilter = null;
   document.getElementById('card-filter-bar')?.classList.add('hidden');
   applyFilters();
+}
+
+// คลิก segment ใน Paid dashboard → หน้ารายการ รพ. กรอง เขต + กลุ่มการเงิน พร้อมกัน
+function drillZoneGroup(zone, key) {
+  if (isViewer()) { toast('⚠️ ไม่มีสิทธิ์เข้าถึงหน้านี้', 'warning'); return; }
+  STATE.cardFilter = CARD_FILTERS[key] ? key : null;
+  navigateTo('hospitals');
+  const zoneSel = document.getElementById('filter-zone');
+  if (zoneSel) zoneSel.value = zone;
+  const bar = document.getElementById('card-filter-bar');
+  if (STATE.cardFilter) {
+    document.getElementById('card-filter-label').textContent = `${CARD_FILTERS[key].label} · เขต ${zone}`;
+    bar?.classList.remove('hidden');
+  } else {
+    bar?.classList.add('hidden');
+  }
+  applyFilters();
+}
+
+// ─── Paid dashboard: การชำระเงินรายเขต ─────────────────────
+// segment: ยังไม่ได้ PO (เทา) → ได้ PO รอเช็ค (เหลือง) → ออกเช็คแล้ว (เขียว) — คลิกกรองได้
+function renderPaidZoneChart(rows) {
+  const container = document.getElementById('chart-paid-zone');
+  if (!container) return;
+
+  const zones = {};
+  rows.forEach(r => {
+    const z = getCell(r, 'HEALTH_ZONE');
+    if (!z) return;
+    if (!zones[z]) zones[z] = { paid: 0, popending: 0, nopo: 0, total: 0 };
+    zones[z].total++;
+    if (CARD_FILTERS.paid.test(r)) zones[z].paid++;
+    else if (CARD_FILTERS.popending.test(r)) zones[z].popending++;
+    else zones[z].nopo++;
+  });
+
+  const SEGS = [
+    { key: 'nopo',      color: '#9ca3af' },
+    { key: 'popending', color: '#e3a008' },
+    { key: 'paid',      color: '#0e9f6e' },
+  ];
+
+  const sorted = Object.entries(zones).sort((a, b) => parseFloat(a[0]) - parseFloat(b[0]));
+  container.innerHTML = sorted.map(([z, d]) => {
+    const segs = SEGS.map(({ key, color }) => {
+      const n = d[key];
+      const pct = (n / d.total * 100).toFixed(1);
+      if (n === 0) return '';
+      return `<div class="stacked-seg" style="width:${pct}%;min-width:18px;background:${color}"
+        onclick="event.stopPropagation();drillZoneGroup('${esc(z)}','${key}')"
+        title="เขต ${esc(z)}: ${CARD_FILTERS[key].label} ${n} แห่ง — คลิกเพื่อกรอง"><span class="seg-num">${n}</span></div>`;
+    }).join('');
+    return `<div class="stacked-row">
+      <div class="zone-label">เขต ${esc(z)}</div>
+      <div class="stacked-bar-wrap">${segs}</div>
+      <div class="zone-total">${d.total}</div>
+    </div>`;
+  }).join('');
 }
 
 // ════════════════════════════════════════════
@@ -343,6 +423,37 @@ async function sheetsUpdate(range, values) {
   return res.json();
 }
 
+// เขียนทั้งแถวแบบ "เว้น" คอลัมน์สูตร (CONFIG.FORMULA_COLUMNS เช่น Sales Doc = XLOOKUP)
+// → แตกเป็นหลาย range รอบคอลัมน์ที่ข้าม แล้วยิงทีเดียวด้วย values:batchUpdate
+async function sheetsUpdateRow(sheetRow, rowArr) {
+  const skip = new Set(
+    (CONFIG.FORMULA_COLUMNS || [])
+      .map(name => STATE.headers.indexOf(name))
+      .filter(i => i >= 0)
+  );
+  const colLetter = i => String.fromCharCode(65 + i);   // ใช้ได้ถึงคอลัมน์ Z (ตอนนี้มีถึง X)
+  const data = [];
+  let start = 0;
+  while (start < rowArr.length) {
+    if (skip.has(start)) { start++; continue; }
+    let end = start;
+    while (end + 1 < rowArr.length && !skip.has(end + 1)) end++;
+    data.push({
+      range:  `${CONFIG.SHEET_NAME}!${colLetter(start)}${sheetRow}:${colLetter(end)}${sheetRow}`,
+      values: [rowArr.slice(start, end + 1)],
+    });
+    start = end + 1;
+  }
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.SPREADSHEET_ID}/values:batchUpdate`;
+  const res = await sheetsFetch(url, {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify({ valueInputOption: 'USER_ENTERED', data }),
+  });
+  if (!res.ok) throw await sheetsError(res, 'Update failed');
+  return res.json();
+}
+
 async function loadSheetData() {
   document.getElementById('sync-text').textContent = 'กำลังโหลด...';
   try {
@@ -426,6 +537,13 @@ function renderDashboard() {
   // R3: การ์ด "สถานะอื่นๆ" โชว์เฉพาะเมื่อมีสถานะไม่รู้จักใน Sheet
   document.getElementById('stat-other').textContent = other;
   document.getElementById('card-other')?.classList.toggle('hidden', other === 0);
+
+  // การ์ด "สละสิทธิ์" โชว์เฉพาะเมื่อมี
+  const waived = rows.filter(CARD_FILTERS.waived.test).length;
+  document.getElementById('stat-waived').textContent = waived;
+  document.getElementById('card-waived')?.classList.toggle('hidden', waived === 0);
+
+  renderPaidZoneChart(rows);
 
   // Status chart
   const statusCount = {};
@@ -654,7 +772,7 @@ function renderTrackingTable() {
         <td class="hospital-name">${esc(getCell(row,'HOSPITAL')) || '-'}</td>
         <td>${esc(getCell(row,'PROVINCE')) || '-'}</td>
         <td>${esc(getCell(row,'SALES')) || '-'}</td>
-        <td>${boolIcon(getCell(row,'SALES_DOC'))}</td>
+        <td>${salesDocChip(getCell(row,'SALES_DOC'))}</td>
         <td>${boolIcon(getCell(row,'CONTRACT_DOC'))}</td>
         <td>${boolIcon(getCell(row,'PAID'))}</td>
         <td>${boolIcon(getCell(row,'DELIVERY_ACK'))}</td>
@@ -794,10 +912,8 @@ function buildForm(data = {}) {
       <div class="form-section">เอกสาร</div>
 
       <div class="form-group">
-        <div class="checkbox-group">
-          <input type="checkbox" name="SALES_DOC" id="chk-sales-doc" ${isTruthy(data.SALES_DOC)?'checked':''} />
-          <label for="chk-sales-doc">Sales Doc</label>
-        </div>
+        <label>Sales Doc <span style="font-weight:400;color:var(--gray-400)">(อ่านอย่างเดียว — แก้ที่ tab Doc tracking)</span></label>
+        <div style="padding-top:6px">${salesDocChip(data.SALES_DOC)}</div>
       </div>
 
       <div class="form-group">
@@ -827,7 +943,8 @@ function getFormData(form) {
   const data = {};
   new FormData(form).forEach((val, key) => { data[key] = val; });
   // checkboxes (unchecked don't appear in FormData)
-  ['SALES_DOC','CONTRACT_DOC','PAID','DELIVERY_ACK'].forEach(k => {
+  // SALES_DOC ไม่อยู่ในลิสต์ — เป็น read-only (ค่าจากสูตรใน Sheet, คงค่าเดิมผ่าน baseRow)
+  ['CONTRACT_DOC','PAID','DELIVERY_ACK'].forEach(k => {
     data[k] = form.querySelector(`[name="${k}"]`)?.checked ? 'TRUE' : 'FALSE';
   });
   return data;
@@ -923,7 +1040,8 @@ async function saveModal() {
       // B1: ใช้แถวสดเป็นฐาน → คอลัมน์นอก mapping คงค่าเดิมไว้
       const rowArr = rowFromFormData(data, freshRows[at]);
       const sheetRow = at + 2;   // +2 เพราะ header คือแถว 1
-      await sheetsUpdate(`${CONFIG.SHEET_NAME}!A${sheetRow}:X${sheetRow}`, [rowArr]);
+      // เขียนแบบเว้นคอลัมน์สูตร (Sales Doc = XLOOKUP) — ไม่ทับสูตรใน Sheet
+      await sheetsUpdateRow(sheetRow, rowArr);
       // sync local state ให้ตรงกับ Sheet ล่าสุดทั้งชุด
       freshRows[at] = rowArr;
       STATE.rows = freshRows;
@@ -1105,3 +1223,4 @@ window.openDetail      = openDetail;
 window.openEditModal   = openEditModal;
 window.drillCard       = drillCard;
 window.clearCardFilter = clearCardFilter;
+window.drillZoneGroup  = drillZoneGroup;

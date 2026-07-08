@@ -30,6 +30,10 @@ const CONFIG = {
   // (เดิม - ไม่ใช้แล้ว แต่เก็บไว้)
   ALLOWED_DOMAIN: null,
 
+  // คอลัมน์ที่เป็นสูตรใน Sheet (เช่น XLOOKUP จาก tab Doc tracking) — แอปห้ามเขียนทับเด็ดขาด
+  // ตอนเซฟจะข้ามคอลัมน์เหล่านี้ (เขียนเป็นหลาย range รอบๆ แทน)
+  FORMULA_COLUMNS: ['Sales Doc'],
+
   // Column definitions (สำคัญ: ต้องตรงกับ Header row ใน Google Sheet)
   COLUMNS: {
     PHASE: 'Phase',
@@ -74,6 +78,12 @@ const CONFIG = {
       '-',
       '',
     ],
+    // รพ. ที่สละสิทธิ์ไม่เข้าร่วมโครงการ — แยกกลุ่มของตัวเอง คงอยู่ในฐานจำนวนรวม
+    WAIVED: ['Waive'],
+    // ค่าในคอลัมน์ Sales Doc (เทียบแบบ lowercase) ที่ถือว่า "เริ่มทำเอกสารขายแล้ว"
+    // → derive เป็นสถานะ "อยู่ระหว่างทำสัญญา" เมื่อยังไม่มี Implement Status
+    // รองรับทั้งค่าใหม่ (Completed / In progress จาก XLOOKUP tab Doc tracking) และ TRUE เดิมช่วง migrate
+    SALES_DOC_ACTIVE: ['in progress', 'completed', 'true', 'yes', '1'],
     // สถานะที่ไม่เข้ากลุ่มไหนเลย → การ์ด "สถานะอื่นๆ" (R3) จะโชว์อัตโนมัติ
   },
 

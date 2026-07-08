@@ -428,6 +428,33 @@ input, select, textarea { font-family: inherit; }
 .bar-fill.red    { background: var(--danger); }
 .bar-val  { width: 32px; text-align: right; color: var(--gray-500); font-size: .78rem; }
 
+/* ─── Stacked Zone Chart (Paid dashboard) ─────────────────── */
+.stacked-chart { display: flex; flex-direction: column; gap: 10px; }
+.stacked-row {
+  display: grid;
+  grid-template-columns: 60px 1fr 52px;
+  align-items: center;
+  gap: 10px;
+}
+.zone-label { font-size: .8rem; font-weight: 600; color: var(--gray-500); text-align: right; }
+.stacked-bar-wrap { height: 26px; background: var(--gray-100); border-radius: 6px; overflow: hidden; display: flex; }
+.stacked-seg {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  cursor: pointer;
+  transition: width .4s ease, filter .15s;
+}
+.stacked-seg:hover { filter: brightness(1.12); }
+.seg-num { font-size: .72rem; font-weight: 700; color: #fff; white-space: nowrap; text-shadow: 0 1px 2px rgba(0,0,0,.35); }
+.zone-total { font-size: .8rem; font-weight: 700; color: var(--gray-800); }
+
+.chart-legend { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 14px; }
+.chart-legend .legend-item { display: flex; align-items: center; gap: 6px; font-size: .78rem; color: var(--gray-500); }
+.chart-legend .legend-dot { width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0; }
+
 /* ─── Donut / Pie ─────────────────────────────────────────── */
 .pie-wrap { display: flex; align-items: center; gap: 20px; }
 .pie-chart { flex-shrink: 0; }

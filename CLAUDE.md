@@ -43,10 +43,24 @@ SHEET_NAME: 'Master'
 ## Status Classification (นิยามกลาง — admin/viewer ตรงกัน)
 ```
 Golive แล้ว    = STATUS ขึ้นต้นด้วย "Lived" (รวม "Lived and Re-Check…")
-กำลังดำเนินการ  = Machine in Transit / In process config network with IT / Ready for Training
-ทำสัญญา        = STATUS ว่างหรือ '-' แต่ Sales Doc = TRUE → derive เป็น "Contract in progress"
-รอดำเนินการ    = Waiting PACS / Waiting Swaping / Ready for Sending / '-' / ว่าง (ไม่รวมทำสัญญา)
+กำลังดำเนินการ  = In Transit / Config network / Ready Training / Wait PACS / Ready Sending
+ทำสัญญา        = STATUS ว่างหรือ '-' แต่ Sales Doc active → derive "Contract in progress"
+รอดำเนินการ    = Waiting Swaping / '-' / ว่าง (ไม่รวมทำสัญญา)
+สละสิทธิ์       = STATUS ใน WAIVED (เช่น "Waive") — กลุ่มแยก คงในฐานรวม การ์ดโชว์เมื่อมี
 ```
+**Sales Doc เป็นข้อความ 3 ค่า** (Completed / In progress / Not started — XLOOKUP จาก tab "Doc tracking")
+- ค่าที่นับว่า active อยู่ใน `STATUS_GROUPS.SALES_DOC_ACTIVE` (รวม TRUE เดิมช่วง migrate)
+- ⚠️ **คอลัมน์ Sales Doc เป็นสูตร — แอปห้ามเขียนทับ**: `CONFIG.FORMULA_COLUMNS` + `sheetsUpdateRow()`
+  เซฟแบบ batchUpdate เว้นคอลัมน์สูตร, ฟอร์มแก้ไขแสดง Sales Doc แบบ read-only chip
+- Pipeline เอกสารเต็ม (tab Doc tracking): ติดต่อผู้ประสานงาน (L) → QT หลัก (M) → Spec บัญชีนวัตกรรม (P)
+  → Product Spec (S) [รวม = Sales Doc] → PO/สัญญา (U = Contract Doc) → ออกเช็ค (W = Paid)
+
+## Paid Dashboard + Drill-down
+- กล่อง "การชำระเงินรายเขต" ทั้ง 2 แอป: ยังไม่ได้ PO (เทา) / ได้ PO รอเช็ค (เหลือง) / ออกเช็คแล้ว (เขียว)
+  ใช้กลุ่ม `paid` / `popending` / `nopo` (มิติการเงิน — คนละ partition กับสถานะติดตั้ง)
+- Zone chart (viewer) 5 segments: สละสิทธิ์/รอ/ดำเนินการ/ทำสัญญา/Golive — **คลิกที่ segment ได้**
+  → `drillZoneGroup(zone, group)` กรอง เขต+กลุ่ม พร้อมกัน (คลิกชื่อแถว = ทั้งเขต)
+- การ์ด Paid ใน viewer คลิกได้
 - **นิยามกลางอยู่ที่ `CONFIG.STATUS_GROUPS` ใน config.js ที่เดียว** (R2 ✅) — `CARD_FILTERS` (app.js) และ `V_CARDS` (viewer.html) ดึงจากที่นี่ ห้ามไป hardcode list ในแอปอีก
 - "Contract in progress" เป็น derived status ตอนแสดงผล (`displayStatus`/`vcDisplayStatus`) — ไม่เขียนลง Sheet
 - **สถานะที่ไม่เข้ากลุ่มไหนเลย → การ์ด "สถานะอื่นๆ" ❓ โชว์อัตโนมัติ** (R3 ✅) — ปกติการ์ดนี้ซ่อน ถ้าโผล่แปลว่าทีมพิมพ์สถานะใหม่ลง Sheet ต้องไปจัดกลุ่มใน STATUS_GROUPS (zone chart ฝั่ง viewer นับสถานะอื่นๆ เข้าแถบเหลือง)

@@ -135,6 +135,14 @@
             <div class="label">ชำระแล้ว</div>
           </div>
         </div>
+        <!-- โชว์เฉพาะเมื่อมี รพ. สละสิทธิ์ -->
+        <div class="stat-card clickable hidden" id="card-waived" onclick="drillCard('waived')" title="คลิกเพื่อดูรายชื่อ รพ. ที่สละสิทธิ์">
+          <div class="stat-icon gray">🚫</div>
+          <div class="stat-info">
+            <div class="value" id="stat-waived">-</div>
+            <div class="label">สละสิทธิ์</div>
+          </div>
+        </div>
         <!-- R3: โชว์เฉพาะเมื่อมีสถานะที่ไม่เข้ากลุ่มไหนเลย (เตือนให้ไปจัดกลุ่มใน config.js) -->
         <div class="stat-card clickable hidden" id="card-other" onclick="drillCard('other')" title="มีสถานะใหม่ใน Sheet ที่ยังไม่ถูกจัดกลุ่ม — คลิกเพื่อดูรายชื่อ">
           <div class="stat-icon gray">❓</div>
@@ -174,6 +182,20 @@
           </div>
           <div class="bar-chart" id="chart-phase"></div>
         </div>
+      </div>
+
+      <!-- Paid dashboard: การชำระเงินรายเขต -->
+      <div class="card" style="margin-bottom:24px;">
+        <div class="card-header">
+          <div class="card-title">💰 การชำระเงินรายเขต</div>
+          <div class="card-hint" style="font-size:.76rem;color:var(--gray-400);">คลิกที่แถบสีเพื่อดูรายชื่อ รพ.</div>
+        </div>
+        <div class="chart-legend">
+          <div class="legend-item"><div class="legend-dot" style="background:#9ca3af"></div> ยังไม่ได้ PO</div>
+          <div class="legend-item"><div class="legend-dot" style="background:#e3a008"></div> ได้ PO รอออกเช็ค</div>
+          <div class="legend-item"><div class="legend-dot" style="background:#0e9f6e"></div> ออกเช็คแล้ว</div>
+        </div>
+        <div class="stacked-chart" id="chart-paid-zone"></div>
       </div>
 
     </main>
