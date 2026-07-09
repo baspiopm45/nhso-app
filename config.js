@@ -34,6 +34,24 @@ const CONFIG = {
   // ตอนเซฟจะข้ามคอลัมน์เหล่านี้ (เขียนเป็นหลาย range รอบๆ แทน)
   FORMULA_COLUMNS: ['Sales Doc'],
 
+  // ─── Phase B: ติ๊กขั้นเอกสารขายจากแอป → เขียนลง tab "Doc tracking" ───
+  // ตำแหน่งคอลัมน์ตามที่พี่เอ็กซ์ (Chaiwat) ระบุ 2026-07-06 — เป็น checkbox ทั้ง 6 ช่อง
+  // แอปเขียน TRUE/FALSE เฉพาะ 6 คอลัมน์นี้เท่านั้น · J (Progress) กับ K (สรุป) เป็นสูตร ห้ามแตะ
+  DOC_TRACKING: {
+    SHEET_NAME: 'Doc tracking',
+    KEY_COL: 'C',                       // ชื่อโรงพยาบาล — คีย์เดียวกับที่ XLOOKUP ใน Master ใช้
+    // canary: ถ้า header คอลัมน์ L ไม่มีคำนี้ แปลว่าคอลัมน์ในชีทถูกย้าย → ปิดการติ๊กทันที กันเขียนผิดช่อง
+    CANARY: { col: 'L', mustInclude: 'ติดต่อ' },
+    STEPS: [
+      { col: 'L', label: 'ติดต่อผู้ประสานงาน' },
+      { col: 'M', label: 'QT หลัก' },
+      { col: 'P', label: 'Spec บัญชีนวัตกรรม' },
+      { col: 'S', label: 'Product Spec' },
+      { col: 'U', label: 'PO / ทำสัญญา' },
+      { col: 'W', label: 'ออกเช็ค' },
+    ],
+  },
+
   // Column definitions (สำคัญ: ต้องตรงกับ Header row ใน Google Sheet)
   COLUMNS: {
     PHASE: 'Phase',

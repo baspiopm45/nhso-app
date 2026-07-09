@@ -19,6 +19,14 @@ const STATE = {
   editRowIndex: null,   // 0-based index in STATE.rows (null = new)
   detailRow:    null,
   cardFilter:   null,   // drill-down จาก stat card: 'lived'|'transit'|'contract'|'waiting'|'paid'
+  // Phase B: ข้อมูล tab Doc tracking (ติ๊กขั้นเอกสารขาย)
+  docHeaders:   [],
+  docRows:      [],
+  docByName:    new Map(),   // ชื่อ รพ. (trim) → แถวใน docRows
+  docStepIdx:   [],          // index คอลัมน์ของแต่ละขั้น (จาก CONFIG.DOC_TRACKING.STEPS)
+  docLoaded:    false,
+  docReady:     false,       // canary header ผ่าน → อนุญาตให้ติ๊ก
+  docEditKey:   null,        // ชื่อ รพ. ที่กำลังเปิด modal
 };
 
 // ─── Column index helpers ──────────────────────────────────
@@ -507,9 +515,50 @@ async function loadSheetData() {
     document.getElementById('sync-text').textContent = `อัปเดต ${now}`;
     toast(`โหลดข้อมูล ${STATE.rows.length} รายการสำเร็จ`, 'success');
 
+    // Phase B: โหลด tab Doc tracking ต่อท้าย (ไม่ block หน้าหลัก — เสร็จแล้วค่อย re-render ตาราง)
+    loadDocTracking();
+
   } catch (e) {
     toast('โหลดข้อมูลล้มเหลว: ' + e.message, 'error');
     document.getElementById('sync-text').textContent = 'โหลดล้มเหลว';
+  }
+}
+
+// ─── Phase B: tab Doc tracking ─────────────────────────────
+const docColIdx = letter => letter.charCodeAt(0) - 65;   // 'A'→0 … 'Z'→25
+
+async function loadDocTracking() {
+  const dt = CONFIG.DOC_TRACKING;
+  try {
+    const data = await sheetsGet(`'${dt.SHEET_NAME}'!A:Z`);
+    const all = data.values || [];
+    STATE.docHeaders = all[0] || [];
+    STATE.docRows    = all.slice(1);
+    STATE.docStepIdx = dt.STEPS.map(s => docColIdx(s.col));
+    STATE.docLoaded  = true;
+
+    // canary: header คอลัมน์ L ต้องมีคำที่กำหนด — ถ้าคอลัมน์ในชีทถูกแทรก/ย้าย ตัวอักษรจะเลื่อน
+    // แล้วแอปอาจเขียนผิดช่อง → ปิดการติ๊กทั้งหมดไว้ก่อน
+    const canary = String(STATE.docHeaders[docColIdx(dt.CANARY.col)] ?? '');
+    STATE.docReady = canary.includes(dt.CANARY.mustInclude);
+    if (!STATE.docReady) {
+      toast(`⚠️ โครงคอลัมน์ tab ${dt.SHEET_NAME} เปลี่ยนไป — ปิดการติ๊กเอกสารชั่วคราว`, 'warning');
+    }
+
+    // index ตามชื่อ รพ. (คีย์เดียวกับ XLOOKUP)
+    STATE.docByName = new Map();
+    const keyIdx = docColIdx(dt.KEY_COL);
+    STATE.docRows.forEach(r => {
+      const name = String(r[keyIdx] ?? '').trim();
+      if (name && !STATE.docByName.has(name)) STATE.docByName.set(name, r);
+    });
+
+    renderTrackingTable();
+  } catch (e) {
+    STATE.docLoaded = true;
+    STATE.docReady  = false;
+    toast('โหลด Doc tracking ล้มเหลว: ' + e.message, 'warning');
+    renderTrackingTable();
   }
 }
 
@@ -764,19 +813,37 @@ function renderTrackingTable() {
   if (!tbody) return;
 
   if (rows.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="8"><div class="empty-state"><div class="icon">📄</div><p>ไม่พบข้อมูล</p></div></td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="7"><div class="empty-state"><div class="icon">📄</div><p>ไม่พบข้อมูล</p></div></td></tr>`;
   } else {
-    tbody.innerHTML = rows.map(row => `
-      <tr>
+    tbody.innerHTML = rows.map(row => {
+      const name = String(getCell(row,'HOSPITAL')).trim();
+      const doc  = STATE.docByName.get(name);
+
+      let dots, action = '';
+      if (!STATE.docLoaded) {
+        dots = `<span class="text-gray" style="font-size:.75rem">กำลังโหลด…</span>`;
+      } else if (!doc || !STATE.docReady) {
+        dots = `<span class="text-gray" style="font-size:.75rem">${doc ? 'ปิดการแก้ไขชั่วคราว' : 'ไม่พบใน Doc tracking'}</span>`;
+      } else {
+        dots = `<div class="step-dots">${CONFIG.DOC_TRACKING.STEPS.map((st, i) => {
+          const on = isTruthy(doc[STATE.docStepIdx[i]]);
+          return `<span class="step-dot ${on ? 'on' : ''}" title="${esc(st.label)} — ${on ? 'เสร็จแล้ว' : 'ยังไม่เสร็จ'}">${i + 1}</span>`;
+        }).join('')}</div>`;
+        action = `<button class="icon-btn edit" title="ติ๊กขั้นเอกสาร">✏️</button>`;
+      }
+
+      const clickable = doc && STATE.docReady;
+      return `
+      <tr ${clickable ? `data-n="${esc(name)}" onclick="openDocModal(this.dataset.n)" style="cursor:pointer"` : ''}>
         <td>${esc(getCell(row,'PHASE')) || '-'}</td>
         <td class="hospital-name">${esc(getCell(row,'HOSPITAL')) || '-'}</td>
         <td>${esc(getCell(row,'PROVINCE')) || '-'}</td>
         <td>${esc(getCell(row,'SALES')) || '-'}</td>
+        <td>${dots}</td>
         <td>${salesDocChip(getCell(row,'SALES_DOC'))}</td>
-        <td>${boolIcon(getCell(row,'CONTRACT_DOC'))}</td>
-        <td>${boolIcon(getCell(row,'PAID'))}</td>
-        <td>${boolIcon(getCell(row,'DELIVERY_ACK'))}</td>
-      </tr>`).join('');
+        <td>${action}</td>
+      </tr>`;
+    }).join('');
   }
 
   document.getElementById('track-info').textContent = `แสดง ${rows.length} รายการ`;
@@ -786,6 +853,89 @@ function renderTrackingTable() {
   document.getElementById(id)?.addEventListener('input', renderTrackingTable);
   document.getElementById(id)?.addEventListener('change', renderTrackingTable);
 });
+
+// ════════════════════════════════════════════
+// PHASE B: DOC STEP EDITOR (stepper modal)
+// ════════════════════════════════════════════
+function openDocModal(name) {
+  const doc = STATE.docByName.get(name);
+  if (!doc || !STATE.docReady) { toast('ไม่พบข้อมูลใน Doc tracking', 'warning'); return; }
+  STATE.docEditKey = name;
+  document.getElementById('doc-title').textContent = name;
+  document.getElementById('doc-body').innerHTML = CONFIG.DOC_TRACKING.STEPS.map((st, i) => {
+    const on = isTruthy(doc[STATE.docStepIdx[i]]);
+    return `
+    <label class="doc-step">
+      <input type="checkbox" data-step="${i}" ${on ? 'checked' : ''} />
+      <span class="doc-step-num">${i + 1}</span>
+      <span class="doc-step-label">${esc(st.label)}</span>
+      <span class="doc-step-col">คอลัมน์ ${st.col}</span>
+    </label>`;
+  }).join('');
+  document.getElementById('doc-overlay').classList.remove('hidden');
+}
+
+function closeDocModal() {
+  STATE.docEditKey = null;
+  document.getElementById('doc-overlay').classList.add('hidden');
+}
+
+async function saveDocSteps() {
+  const name = STATE.docEditKey;
+  if (!name) return;
+  const boxes = [...document.querySelectorAll('#doc-body input[type="checkbox"]')];
+  const btn = document.getElementById('doc-save');
+  btn.disabled = true; btn.textContent = '⏳ กำลังบันทึก...';
+
+  try {
+    const dt = CONFIG.DOC_TRACKING;
+
+    // 1) โหลดสด + หาแถวด้วยชื่อ รพ. (ต้อง unique เท่านั้น — กันเขียนผิดแถว)
+    const data = await sheetsGet(`'${dt.SHEET_NAME}'!A:Z`);
+    const rows = (data.values || []).slice(1);
+    const keyIdx = docColIdx(dt.KEY_COL);
+    const hits = [];
+    rows.forEach((r, i) => { if (String(r[keyIdx] ?? '').trim() === name) hits.push(i); });
+    if (hits.length === 0) throw new Error(`ไม่พบ "${name}" ใน ${dt.SHEET_NAME} — อาจถูกลบ/เปลี่ยนชื่อ`);
+    if (hits.length > 1)  throw new Error(`พบชื่อ "${name}" ซ้ำ ${hits.length} แถวใน ${dt.SHEET_NAME} — กรุณาแก้ในชีทโดยตรง`);
+    const at = hits[0], sheetRow = at + 2;
+    const cur = rows[at];
+
+    // 2) เตรียมเขียนเฉพาะช่องที่เปลี่ยน + ตรวจว่าช่องเป้าหมายเป็น checkbox จริง (กันคอลัมน์เลื่อน)
+    const updates = [];
+    dt.STEPS.forEach((st, i) => {
+      const idx = STATE.docStepIdx[i];
+      const curVal = String(cur[idx] ?? '');
+      if (!['TRUE', 'FALSE', ''].includes(curVal)) {
+        throw new Error(`ค่าในคอลัมน์ ${st.col} ไม่ใช่ checkbox ("${curVal}") — โครงชีทอาจเปลี่ยน ยกเลิกเพื่อความปลอดภัย`);
+      }
+      const want = boxes[i].checked ? 'TRUE' : 'FALSE';
+      const curBool = curVal === 'TRUE' ? 'TRUE' : 'FALSE';
+      if (want !== curBool) {
+        updates.push({ range: `'${dt.SHEET_NAME}'!${st.col}${sheetRow}`, values: [[want]] });
+      }
+    });
+
+    if (updates.length === 0) { toast('ไม่มีการเปลี่ยนแปลง', 'info'); closeDocModal(); return; }
+
+    // 3) เขียนทีเดียวด้วย batchUpdate — เฉพาะเซลล์ขั้นที่เปลี่ยน ไม่แตะ J/K (สูตร) และคอลัมน์อื่น
+    const url = `https://sheets.googleapis.com/v4/spreadsheets/${CONFIG.SPREADSHEET_ID}/values:batchUpdate`;
+    const res = await sheetsFetch(url, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ valueInputOption: 'USER_ENTERED', data: updates }),
+    });
+    if (!res.ok) throw await sheetsError(res, 'บันทึกล้มเหลว');
+
+    toast(`บันทึก ${updates.length} ขั้นสำเร็จ ✅ (สรุป Sales Doc อัปเดตตามสูตร)`, 'success');
+    closeDocModal();
+    await loadSheetData();   // Master รับค่าใหม่ผ่าน XLOOKUP + Doc tracking รีเฟรช
+  } catch (e) {
+    toast('บันทึกล้มเหลว: ' + e.message, 'error');
+  } finally {
+    btn.disabled = false; btn.textContent = '💾 บันทึก';
+  }
+}
 
 // ════════════════════════════════════════════
 // MODAL - ADD / EDIT
@@ -1211,6 +1361,14 @@ document.getElementById('detail-overlay')?.addEventListener('click', e => {
   if (e.target === document.getElementById('detail-overlay')) closeDetail();
 });
 
+// Doc step editor (Phase B)
+document.getElementById('doc-close')?.addEventListener('click', closeDocModal);
+document.getElementById('doc-cancel')?.addEventListener('click', closeDocModal);
+document.getElementById('doc-save')?.addEventListener('click', saveDocSteps);
+document.getElementById('doc-overlay')?.addEventListener('click', e => {
+  if (e.target === document.getElementById('doc-overlay')) closeDocModal();
+});
+
 // ════════════════════════════════════════════
 // INIT
 // ════════════════════════════════════════════
@@ -1224,3 +1382,4 @@ window.openEditModal   = openEditModal;
 window.drillCard       = drillCard;
 window.clearCardFilter = clearCardFilter;
 window.drillZoneGroup  = drillZoneGroup;
+window.openDocModal    = openDocModal;

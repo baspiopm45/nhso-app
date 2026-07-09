@@ -302,15 +302,14 @@
                 <th>ชื่อหน่วยบริการ</th>
                 <th>จังหวัด</th>
                 <th>Sales</th>
-                <th>Sales Doc</th>
-                <th>Contract Doc</th>
-                <th>Paid?</th>
-                <th>ใบตอบรับ</th>
+                <th>ขั้นเอกสารขาย (1–6)</th>
+                <th>สรุป Sales Doc</th>
+                <th>จัดการ</th>
               </tr>
             </thead>
             <tbody id="track-body">
               <tr>
-                <td colspan="8">
+                <td colspan="7">
                   <div class="loading-wrap">
                     <div class="spinner"></div>
                     <span>กำลังโหลด...</span>
@@ -373,6 +372,29 @@
     <div class="modal-footer">
       <button class="btn btn-outline" id="detail-edit-btn">✏️ แก้ไข</button>
       <button class="btn btn-outline" id="detail-close-btn">ปิด</button>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════
+     MODAL: Doc Step Editor (Phase B)
+════════════════════════════════════════════ -->
+<div class="modal-overlay hidden" id="doc-overlay">
+  <div class="modal" style="max-width:480px;">
+    <div class="modal-header">
+      <span class="modal-title" id="doc-title">ขั้นเอกสาร</span>
+      <button class="modal-close" id="doc-close">✕</button>
+    </div>
+    <div class="modal-body">
+      <p style="font-size:.78rem;color:var(--gray-500);margin-bottom:12px;">
+        ติ๊กขั้นที่เสร็จแล้วกดบันทึก — เขียนลง tab Doc tracking เฉพาะช่องที่เปลี่ยน
+        · สรุป Sales Doc และหน้า Master อัปเดตอัตโนมัติผ่านสูตร
+      </p>
+      <div id="doc-body"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" id="doc-cancel">ยกเลิก</button>
+      <button class="btn btn-primary" id="doc-save">💾 บันทึก</button>
     </div>
   </div>
 </div>
