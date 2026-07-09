@@ -100,7 +100,6 @@
     .seg-progress { background:#F59E0B; }
     .seg-waiting  { background:#FC8181; }
     .seg-contract { background:#6366F1; }
-    .seg-waived   { background:#A8A29E; }
     .seg-nopo     { background:#D1C8BD; }
     .seg-popending{ background:#F59E0B; }
     .seg-paid     { background:#16A34A; }
@@ -361,7 +360,6 @@
           <span class="card-hint">คลิกที่เขตเพื่อดูรายชื่อ รพ.</span>
         </div>
         <div class="legend">
-          <div class="legend-item"><div class="legend-dot" style="background:#A8A29E"></div> สละสิทธิ์</div>
           <div class="legend-item"><div class="legend-dot" style="background:#FC8181"></div> ยังไม่เริ่ม / รอ</div>
           <div class="legend-item"><div class="legend-dot" style="background:#F59E0B"></div> กำลังดำเนินการ</div>
           <div class="legend-item"><div class="legend-dot" style="background:#6366F1"></div> ทำสัญญา</div>
@@ -754,16 +752,15 @@ function renderZoneChart(rows) {
   const zones={};
   rows.forEach(r=>{
     const z=vcGet(r,'HEALTH_ZONE');if(!z)return;
-    if(!zones[z])zones[z]={waived:0,waiting:0,progress:0,contract:0,lived:0,total:0};
+    if(V_CARDS.waived.test(r))return;   // สละสิทธิ์ไม่อยู่ใน pipeline ความคืบหน้า — ไม่นับในกราฟนี้ (ดูได้จากการ์ด 🚫)
+    if(!zones[z])zones[z]={waiting:0,progress:0,contract:0,lived:0,total:0};
     zones[z].total++;
     if(V_CARDS.lived.test(r))zones[z].lived++;
     else if(V_CARDS.contract.test(r))zones[z].contract++;
-    else if(V_CARDS.waived.test(r))zones[z].waived++;
     else if(V_CARDS.progress.test(r)||V_CARDS.other.test(r))zones[z].progress++;  // สถานะอื่นๆ นับรวมแถบเหลือง
     else zones[z].waiting++;
   });
   document.getElementById('chart-zone').innerHTML=buildZoneRows(zones,[
-    {key:'waived',  cls:'seg-waived'},
     {key:'waiting', cls:'seg-waiting'},
     {key:'progress',cls:'seg-progress'},
     {key:'contract',cls:'seg-contract'},
