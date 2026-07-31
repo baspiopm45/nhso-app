@@ -940,7 +940,9 @@ async function saveDocSteps() {
 // ════════════════════════════════════════════
 // MODAL - ADD / EDIT
 // ════════════════════════════════════════════
-function buildForm(data = {}) {
+function buildForm(data = {}, opts = {}) {
+  // opts.lockStatus: ฟอร์มแก้ไข → Implement Status เป็น read-only (แก้สถานะใน Sheet เท่านั้น)
+  // ค่าเดิมถูกคงไว้ตอนเซฟผ่าน baseRow (data.STATUS ไม่อยู่ใน FormData → ไม่ถูกเขียนทับ)
   return `
     <div class="form-grid">
       <div class="form-section">ข้อมูลพื้นฐาน</div>
@@ -1033,10 +1035,15 @@ function buildForm(data = {}) {
       <div class="form-section">สถานะการดำเนินงาน</div>
 
       <div class="form-group full">
+        ${opts.lockStatus ? `
+        <label>Implement Status <span style="font-weight:400;color:var(--gray-400)">(อ่านอย่างเดียว — แก้สถานะใน Google Sheet)</span></label>
+        <div style="padding-top:6px">${statusBadge(data.STATUS || '-')}</div>
+        ` : `
         <label>Implement Status</label>
         <select class="form-control" name="STATUS">
           ${CONFIG.STATUS_OPTIONS.map(s => `<option value="${s}" ${data.STATUS==s?'selected':''}>${s}</option>`).join('')}
         </select>
+        `}
       </div>
 
       <div class="form-group">
@@ -1163,7 +1170,7 @@ function openEditModal(absIdx) {
   Object.entries(COL).forEach(([key, idx]) => { data[key] = row[idx] ?? ''; });
 
   document.getElementById('modal-title').textContent = '✏️ แก้ไขรายการ';
-  document.getElementById('modal-body').innerHTML = `<form id="edit-form">${buildForm(data)}</form>`;
+  document.getElementById('modal-body').innerHTML = `<form id="edit-form">${buildForm(data, { lockStatus: true })}</form>`;
   document.getElementById('modal-overlay').classList.remove('hidden');
 }
 
