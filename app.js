@@ -941,8 +941,10 @@ async function saveDocSteps() {
 // MODAL - ADD / EDIT
 // ════════════════════════════════════════════
 function buildForm(data = {}, opts = {}) {
-  // opts.lockStatus: ฟอร์มแก้ไข → Implement Status เป็น read-only (แก้สถานะใน Sheet เท่านั้น)
-  // ค่าเดิมถูกคงไว้ตอนเซฟผ่าน baseRow (data.STATUS ไม่อยู่ใน FormData → ไม่ถูกเขียนทับ)
+  // opts.lockStatus: ฟอร์มแก้ไข → Implement Status + วันที่ทั้ง 4 เป็น read-only (แก้ใน Sheet เท่านั้น)
+  // field ที่ล็อกไม่มี input ใน FormData → ตอนเซฟค่าเดิมถูกคงไว้ผ่าน baseRow ไม่ถูกเขียนทับ
+  const ro = !!opts.lockStatus;
+  const roVal = v => `<div style="padding-top:9px;font-size:.88rem;color:var(--gray-700)">${esc(v || '') || '-'}</div>`;
   return `
     <div class="form-grid">
       <div class="form-section">ข้อมูลพื้นฐาน</div>
@@ -1032,7 +1034,7 @@ function buildForm(data = {}, opts = {}) {
         <input class="form-control" name="EMAIL" type="email" value="${esc(data.EMAIL||'')}" />
       </div>
 
-      <div class="form-section">สถานะการดำเนินงาน</div>
+      <div class="form-section">สถานะการดำเนินงาน${ro ? ' — อ่านอย่างเดียว (แก้ใน Google Sheet)' : ''}</div>
 
       <div class="form-group full">
         ${opts.lockStatus ? `
@@ -1048,22 +1050,22 @@ function buildForm(data = {}, opts = {}) {
 
       <div class="form-group">
         <label>วันที่ส่งเครื่องไป</label>
-        <input class="form-control" name="SEND_DATE" type="date" value="${esc(data.SEND_DATE||'')}" />
+        ${ro ? roVal(data.SEND_DATE) : `<input class="form-control" name="SEND_DATE" type="date" value="${esc(data.SEND_DATE||'')}" />`}
       </div>
 
       <div class="form-group">
         <label>Golive Date</label>
-        <input class="form-control" name="GOLIVE" type="date" value="${esc(data.GOLIVE||'')}" />
+        ${ro ? roVal(data.GOLIVE) : `<input class="form-control" name="GOLIVE" type="date" value="${esc(data.GOLIVE||'')}" />`}
       </div>
 
       <div class="form-group">
         <label>วันที่เริ่มสัญญา</label>
-        <input class="form-control" name="CONTRACT_START" type="date" value="${esc(data.CONTRACT_START||'')}" />
+        ${ro ? roVal(data.CONTRACT_START) : `<input class="form-control" name="CONTRACT_START" type="date" value="${esc(data.CONTRACT_START||'')}" />`}
       </div>
 
       <div class="form-group">
         <label>วันที่สิ้นสุดสัญญา</label>
-        <input class="form-control" name="CONTRACT_END" type="date" value="${esc(data.CONTRACT_END||'')}" />
+        ${ro ? roVal(data.CONTRACT_END) : `<input class="form-control" name="CONTRACT_END" type="date" value="${esc(data.CONTRACT_END||'')}" />`}
       </div>
 
       <div class="form-section">เอกสาร</div>
