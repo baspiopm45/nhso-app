@@ -16,6 +16,8 @@ const CFG = {
   SHEET_NAME: 'Master',
   NEAR_DAYS: 90,                      // "ใกล้หมด" = เหลือ ≤ 90 วัน (ตรงกับแอป)
   ESTIMATE_FROM_GOLIVE: true,         // ไม่มีวันสิ้นสุดจริง → ประมาณการ Golive + 1 ปี − 1 วัน
+  TOP_N: 20,                          // email โชว์เฉพาะ top N เร่งด่วนสุด ที่เหลือดูใน dashboard
+  DASHBOARD_URL: 'https://baspiopm45.github.io/nhso-app/',
 
   // ผู้รับสรุปรวม (internal report — ไม่ใช้ baspiopm45@gmail.com)
   RECIPIENTS: ['ruchasit@perceptra.tech', 'kitti@perceptra.tech', 'chaiwat@perceptra.tech'],
@@ -134,33 +136,58 @@ function parseDate_(v) {
 
 function buildHtml_(expired, near) {
   const fmt = d => Utilities.formatDate(d, 'Asia/Bangkok', 'd MMM yyyy');
-  const row = (it, color) => `
+  const all = expired.concat(near).sort((a, b) => a.end - b.end);   // เร่งด่วนสุด (หมดก่อน) ขึ้นก่อน
+  const top = all.slice(0, CFG.TOP_N);
+  const rest = all.length - top.length;
+  const estCount = all.filter(it => it.estimated).length;
+
+  const chip = it => it.days < 0
+    ? '<span style="background:#fee2e2;color:#991b1b;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:bold;white-space:nowrap">หมดแล้ว</span>'
+    : '<span style="background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:bold;white-space:nowrap">ใกล้หมด</span>';
+
+  const rows = top.map(it => `
     <tr>
-      <td style="padding:6px 10px;border-bottom:1px solid #eee"><b>${it.name}</b></td>
-      <td style="padding:6px 10px;border-bottom:1px solid #eee">${it.province} (เขต ${it.zone})</td>
-      <td style="padding:6px 10px;border-bottom:1px solid #eee">${it.sales}</td>
-      <td style="padding:6px 10px;border-bottom:1px solid #eee">${fmt(it.end)}${it.estimated ? ' <span style="color:#3730a3;font-size:11px">(ประมาณการ)</span>' : ''}</td>
-      <td style="padding:6px 10px;border-bottom:1px solid #eee;text-align:right;color:${color};font-weight:bold">
+      <td style="padding:6px 8px;border-bottom:1px solid #eee">${chip(it)}</td>
+      <td style="padding:6px 8px;border-bottom:1px solid #eee"><b>${it.name}</b></td>
+      <td style="padding:6px 8px;border-bottom:1px solid #eee">${it.province} (เขต ${it.zone})</td>
+      <td style="padding:6px 8px;border-bottom:1px solid #eee">${it.sales}</td>
+      <td style="padding:6px 8px;border-bottom:1px solid #eee">${fmt(it.end)}${it.estimated ? ' <span style="color:#3730a3;font-size:11px">(ประมาณการ)</span>' : ''}</td>
+      <td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:right;font-weight:bold;color:${it.days < 0 ? '#b91c1c' : '#b45309'};white-space:nowrap">
         ${it.days < 0 ? 'เกินมา ' + (-it.days) + ' วัน' : 'อีก ' + it.days + ' วัน'}</td>
-    </tr>`;
-  const table = (title, items, color) => items.length === 0 ? '' : `
-    <h3 style="color:${color};margin:18px 0 6px">${title} (${items.length} แห่ง)</h3>
-    <table style="border-collapse:collapse;font-size:13px;width:100%">
-      <tr style="background:#f3f4f6;text-align:left">
-        <th style="padding:6px 10px">โรงพยาบาล</th><th style="padding:6px 10px">จังหวัด</th>
-        <th style="padding:6px 10px">Sales</th><th style="padding:6px 10px">วันหมดสัญญา</th>
-        <th style="padding:6px 10px;text-align:right">เหลือเวลา</th></tr>
-      ${items.map(it => row(it, color)).join('')}
-    </table>`;
+    </tr>`).join('');
+
   return `
-    <div style="font-family:sans-serif;max-width:720px">
-      <p>สรุปสถานะสัญญาจากระบบ NHSO AI Tracking — โปรดติดต่อลูกค้าเพื่อดำเนินการต่อสัญญา</p>
-      ${table('🔴 หมดสัญญาแล้ว', expired, '#b91c1c')}
-      ${table('🟠 ใกล้หมดสัญญา (ภายใน ' + CFG.NEAR_DAYS + ' วัน)', near, '#b45309')}
-      <p style="color:#9ca3af;font-size:12px;margin-top:18px">
-        "ประมาณการ" = ยังไม่กรอกวันที่สิ้นสุดสัญญาในชีท ระบบคำนวณจาก Golive + 1 ปี −
-        กรอกวันที่จริงในคอลัมน์ "วันที่สิ้นสุดสัญญา" เพื่อให้แม่นยำขึ้น ·
-        Dashboard: https://baspiopm45.github.io/nhso-app/
+    <div style="font-family:sans-serif;max-width:760px">
+      <table style="border-collapse:separate;border-spacing:8px 0;margin:4px 0 14px">
+        <tr>
+          <td style="background:#fee2e2;border-radius:10px;padding:12px 22px;text-align:center">
+            <div style="font-size:26px;font-weight:bold;color:#991b1b">${expired.length}</div>
+            <div style="font-size:12px;color:#991b1b">หมดสัญญาแล้ว</div></td>
+          <td style="background:#fef3c7;border-radius:10px;padding:12px 22px;text-align:center">
+            <div style="font-size:26px;font-weight:bold;color:#92400e">${near.length}</div>
+            <div style="font-size:12px;color:#92400e">ใกล้หมด ≤${CFG.NEAR_DAYS} วัน</div></td>
+          <td style="background:#f3f4f6;border-radius:10px;padding:12px 22px;text-align:center">
+            <div style="font-size:26px;font-weight:bold;color:#374151">${all.length}</div>
+            <div style="font-size:12px;color:#6b7280">รวมต้องตาม (ประมาณการ ${estCount})</div></td>
+        </tr>
+      </table>
+
+      <h3 style="margin:12px 0 6px">🔥 Top ${top.length} เร่งด่วนสุด (เรียงตามวันหมดสัญญา)</h3>
+      <table style="border-collapse:collapse;font-size:13px;width:100%">
+        <tr style="background:#f3f4f6;text-align:left">
+          <th style="padding:6px 8px"></th><th style="padding:6px 8px">โรงพยาบาล</th>
+          <th style="padding:6px 8px">จังหวัด</th><th style="padding:6px 8px">Sales</th>
+          <th style="padding:6px 8px">วันหมดสัญญา</th><th style="padding:6px 8px;text-align:right">เหลือเวลา</th></tr>
+        ${rows}
+      </table>
+      ${rest > 0 ? `<p style="font-size:13px;color:#6b7280;margin:8px 0 0">… และอีก <b>${rest}</b> รายการ — ดูครบทุกตัวใน dashboard</p>` : ''}
+
+      <p style="margin:18px 0 10px">
+        <a href="${CFG.DASHBOARD_URL}" style="background:#1a56db;color:#ffffff;text-decoration:none;padding:10px 18px;border-radius:8px;font-size:14px;font-weight:bold">เปิด Contract Radar ใน Dashboard →</a>
+      </p>
+      <p style="color:#9ca3af;font-size:12px;margin-top:12px">
+        "ประมาณการ" = ยังไม่กรอกวันสิ้นสุดสัญญาในชีท (กติกา: Golive = วันที่ 1 ของสัญญารอบ 1 ปี) —
+        แก้วันจริง: Dashboard → Contract Radar → ✏️
       </p>
     </div>`;
 }
