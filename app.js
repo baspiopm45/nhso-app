@@ -19,6 +19,7 @@ const STATE = {
   editRowIndex: null,   // 0-based index in STATE.rows (null = new)
   detailRow:    null,
   cardFilter:   null,   // drill-down จาก stat card: 'lived'|'transit'|'contract'|'waiting'|'paid'
+  ctAlerted:    false,  // toast เตือนสัญญาหมด/ใกล้หมด แสดงครั้งเดียวต่อ session
   // Phase B: ข้อมูล tab Doc tracking (ติ๊กขั้นเอกสารขาย)
   docHeaders:   [],
   docRows:      [],
@@ -168,7 +169,34 @@ const CARD_FILTERS = {
   // มิติการเงิน (ใช้ใน Paid dashboard รายเขต — ไม่ใช่ partition เดียวกับสถานะติดตั้ง)
   popending: { label: 'ได้ PO รอออกเช็ค', test: r => isTruthy(getCell(r,'CONTRACT_DOC')) && !isTruthy(getCell(r,'PAID')) },
   nopo:      { label: 'ยังไม่ได้ PO',      test: r => !isTruthy(getCell(r,'CONTRACT_DOC')) && !isTruthy(getCell(r,'PAID')) },
+  // มิติสัญญา (Contract Radar) — ใช้ contractInfo() ด้านล่าง
+  ctexpired: { label: 'หมดสัญญาแล้ว',     test: r => contractInfo(r).bucket === 'expired' },
+  ctnear:    { label: 'สัญญาใกล้หมด',      test: r => contractInfo(r).bucket === 'near' },
 };
+
+// ─── Contract Radar: สถานะสัญญาราย รพ. ─────────────────────
+// ใช้วันที่จริงจากคอลัมน์ "วันที่สิ้นสุดสัญญา" ก่อนเสมอ — ถ้าว่างและมี Golive
+// → ประมาณการเป็น Golive + 1 ปี − 1 วัน (ติดธง estimated ให้ UI แสดงป้ายกำกับ)
+function contractInfo(row) {
+  if (isWaivedStatus(getCell(row,'STATUS'))) return { bucket: 'none', end: null, estimated: false, days: null };
+  let end = parseSheetDate(String(getCell(row,'CONTRACT_END')).trim());
+  let estimated = false;
+  if (end === null && CONFIG.CONTRACT.ESTIMATE_FROM_GOLIVE) {
+    const g = parseSheetDate(String(getCell(row,'GOLIVE')).trim());
+    if (g !== null) {
+      const d = new Date(g);
+      d.setFullYear(d.getFullYear() + 1);
+      d.setDate(d.getDate() - 1);
+      end = d.getTime();
+      estimated = true;
+    }
+  }
+  if (end === null) return { bucket: 'none', end: null, estimated: false, days: null };
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const days = Math.ceil((end - today.getTime()) / 86400000);
+  const bucket = days < 0 ? 'expired' : (days <= CONFIG.CONTRACT.NEAR_DAYS ? 'near' : 'active');
+  return { bucket, end, estimated, days };
+}
 
 // คลิก stat card → ไปหน้า รายการโรงพยาบาล พร้อมกรองตามกลุ่มของการ์ด
 function drillCard(key) {
@@ -247,6 +275,61 @@ function renderPaidZoneChart(rows) {
       <div class="zone-total">${d.total}</div>
     </div>`;
   }).join('');
+}
+
+// ─── Contract Radar: ตารางสัญญาหมด/ใกล้หมด (admin เท่านั้น) ─
+function renderContractRadar(rows) {
+  const el = document.getElementById('contract-radar-body');
+  if (!el) return;
+
+  const items = [];
+  let active = 0, none = 0;
+  rows.forEach(r => {
+    const ci = contractInfo(r);
+    if (ci.bucket === 'expired' || ci.bucket === 'near') items.push({ r, ci });
+    else if (ci.bucket === 'active') active++;
+    else none++;
+  });
+  items.sort((a, b) => a.ci.end - b.ci.end);
+  const expired = items.filter(x => x.ci.bucket === 'expired').length;
+  const near = items.length - expired;
+
+  document.getElementById('ct-exp-n').textContent = expired;
+  document.getElementById('ct-near-n').textContent = near;
+  document.getElementById('ct-active-n').textContent = active;
+  document.getElementById('ct-none-n').textContent = none;
+
+  // เตือนครั้งแรกของ session ถ้ามีของต้องตามต่อสัญญา
+  if (!STATE.ctAlerted && (expired + near) > 0) {
+    STATE.ctAlerted = true;
+    toast(`📑 สัญญาหมดแล้ว ${expired} · ใกล้หมด ${near} แห่ง — ดูที่ Contract Radar`, 'warning');
+  }
+
+  if (items.length === 0) {
+    el.innerHTML = `<div class="empty-state" style="padding:20px 0"><p>🎉 ไม่มีสัญญาหมดหรือใกล้หมดในขณะนี้</p></div>`;
+    return;
+  }
+
+  const fmtDate = t => new Date(t).toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' });
+  const LIMIT = 15;
+  el.innerHTML = `
+    <table class="ct-table">
+      <thead><tr><th>โรงพยาบาล</th><th>จังหวัด</th><th>Sales</th><th>วันหมดสัญญา</th><th style="text-align:right">เหลือเวลา</th></tr></thead>
+      <tbody>
+      ${items.slice(0, LIMIT).map(({ r, ci }) => {
+        const absIdx = STATE.rows.indexOf(r);
+        const exp = ci.bucket === 'expired';
+        return `<tr onclick="openDetail(${absIdx})" style="cursor:pointer" title="คลิกดูรายละเอียด">
+          <td class="hospital-name">${esc(getCell(r,'HOSPITAL')) || '-'}</td>
+          <td>${esc(getCell(r,'PROVINCE')) || '-'}</td>
+          <td>${esc(getCell(r,'SALES')) || '-'}</td>
+          <td>${fmtDate(ci.end)}${ci.estimated ? ' <span class="ct-est" title="ยังไม่มีวันที่จริงในชีท — คำนวณจาก Golive + 1 ปี">ประมาณการ</span>' : ''}</td>
+          <td style="text-align:right"><span class="ct-days ${exp ? 'exp' : 'near'}">${exp ? 'เกินมา ' + (-ci.days) + ' วัน' : 'อีก ' + ci.days + ' วัน'}</span></td>
+        </tr>`;
+      }).join('')}
+      </tbody>
+    </table>
+    ${items.length > LIMIT ? `<div class="ct-more">แสดง ${LIMIT} รายการแรก — คลิกชิป 🔴/🟠 ด้านบนเพื่อดูทั้งหมดในหน้ารายการ รพ.</div>` : ''}`;
 }
 
 // ════════════════════════════════════════════
@@ -593,6 +676,7 @@ function renderDashboard() {
   document.getElementById('card-waived')?.classList.toggle('hidden', waived === 0);
 
   renderPaidZoneChart(rows);
+  renderContractRadar(rows);
 
   // Status chart
   const statusCount = {};

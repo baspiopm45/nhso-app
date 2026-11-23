@@ -198,6 +198,21 @@
         <div class="stacked-chart" id="chart-paid-zone"></div>
       </div>
 
+      <!-- Contract Radar: เตือนสัญญาหมด/ใกล้หมด (admin เท่านั้น — viewer ไม่มี section นี้) -->
+      <div class="card" style="margin-bottom:24px;">
+        <div class="card-header">
+          <div class="card-title">📑 Contract Radar — สถานะสัญญา</div>
+          <div class="card-hint" style="font-size:.76rem;color:var(--gray-400);">"ประมาณการ" = Golive + 1 ปี (ยังไม่กรอกวันที่จริงในชีท)</div>
+        </div>
+        <div class="ct-chips">
+          <button class="ct-chip exp" onclick="drillCard('ctexpired')" title="คลิกเพื่อดูรายชื่อทั้งหมด">🔴 หมดสัญญาแล้ว <b id="ct-exp-n">-</b></button>
+          <button class="ct-chip near" onclick="drillCard('ctnear')" title="คลิกเพื่อดูรายชื่อทั้งหมด">🟠 ใกล้หมด ≤90 วัน <b id="ct-near-n">-</b></button>
+          <span class="ct-chip ok">🟢 อยู่ในสัญญา <b id="ct-active-n">-</b></span>
+          <span class="ct-chip muted">⚪ ไม่มีข้อมูล <b id="ct-none-n">-</b></span>
+        </div>
+        <div id="contract-radar-body"></div>
+      </div>
+
     </main>
 
     <!-- ══════════ HOSPITALS PAGE ══════════ -->

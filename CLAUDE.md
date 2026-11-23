@@ -110,9 +110,23 @@ git push   # GitHub Pages auto-deploy จาก main (~1 นาที)
   filter dedup/esc/smart sort/drill paging (B4–B7), token refresh/unbounded rows/dynamic filter/checkbox/history dedup (B8–B12)
 - 2026-07-05: R2 (STATUS_GROUPS รวมที่ config.js) + R3 (การ์ด "สถานะอื่นๆ" auto-show) ✅
 - 2026-07-06: zone chart ซอยย่อย+คลิกได้, Paid dashboard รายเขต, การ์ด Paid viewer, Sales Doc 3 ค่า+กันทับสูตร, กลุ่มสละสิทธิ์ (เอาออกจาก zone chart), **Phase B: doc-step editor ติ๊ก 6 ขั้นเขียนกลับ tab Doc tracking** ✅
+- 2026-11-23: **Contract Radar** — เตือนสัญญาหมด/ใกล้หมด (admin เท่านั้น)
+
+## Contract Radar (2026-11-23)
+- Section ใน dashboard admin: ชิป 🔴 หมดแล้ว / 🟠 ใกล้หมด ≤90 วัน (คลิก drill-down ผ่าน CARD_FILTERS `ctexpired`/`ctnear`) + ตารางเรียงตามวันหมด (รพ./จังหวัด/Sales/วันหมด/เหลือกี่วัน)
+- Logic ที่ `contractInfo()` ใน app.js + ค่าตั้งใน `CONFIG.CONTRACT`:
+  ใช้ "วันที่สิ้นสุดสัญญา" จริงก่อนเสมอ → ถ้าว่างและมี Golive **ประมาณการ = Golive + 1 ปี − 1 วัน** (ป้าย "ประมาณการ" สีม่วง)
+  สูตรยืนยันจากเคสจริง: รพ. 50 พรรษาฯ Golive 9/9/2025 → หมด 9/8/2026 · Waive ไม่นับ
+- **Viewer (สปสช.) ไม่มี section นี้** — เรื่อง commercial (บาสเคาะ 2026-11-23)
+- ข้อมูล ณ วันทำ: วันสิ้นสุดจริงมีแค่ 43/595 แถว → โหมดประมาณการคือตัวทำให้ครอบคลุม รพ. ที่ Golive แล้วทั้งหมด
+- **Phase 2 — email อัตโนมัติ**: `apps-script/contract-alert.gs` (logic เดียวกัน) → บาสต้องวางเองใน Sheet:
+  Extensions → Apps Script → paste → Run `installTrigger` ครั้งเดียว = ส่งทุกจันทร์ 08:00 ถึง ruchasit/kitti/chaiwat
+  (`SEND_TO_SALES: true` เมื่อพร้อมส่งแยกรายเซลล์ — map email อยู่ในไฟล์)
 
 ## Open Items
 - [ ] R1: เปลี่ยน Viewer Sheet จาก "anyone with link" เป็นแชร์รายบุคคล (ทำใน Google Sheets — ต้องแชร์ให้ viewer 3 คน + ทีม @perceptra.tech ให้ครบก่อนปิด link ไม่งั้นเจอ 403)
+- [ ] ติดตั้ง contract-alert.gs ใน Sheet (บาสทำเอง ~2 นาที — ดู section Contract Radar)
+- [ ] ชวนทีมกรอก "วันที่สิ้นสุดสัญญา" จริง เพื่อลดแถวที่เป็นประมาณการ
 
 ## Design System
 - Admin (`style.css`): Medical Blue — `--primary: #1a56db`, badge `.badge-contract` = indigo
