@@ -63,6 +63,14 @@ function parseSheetDate(s) {
   return null;
 }
 
+// แปลงค่าวันที่จากชีท (M/D/YYYY หรือ ISO) → 'YYYY-MM-DD' สำหรับ <input type="date">
+function toInputDate(v) {
+  const t = parseSheetDate(String(v ?? '').trim());
+  if (t === null) return '';
+  const d = new Date(t);
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+
 function smartCompare(sa, sb) {
   if (/^-?[\d.]+$/.test(sa) && /^-?[\d.]+$/.test(sb)) return parseFloat(sa) - parseFloat(sb);
   const da = parseSheetDate(sa), db = parseSheetDate(sb);
@@ -314,7 +322,7 @@ function renderContractRadar(rows) {
   const LIMIT = 15;
   el.innerHTML = `
     <table class="ct-table">
-      <thead><tr><th>โรงพยาบาล</th><th>จังหวัด</th><th>Sales</th><th>วันหมดสัญญา</th><th style="text-align:right">เหลือเวลา</th></tr></thead>
+      <thead><tr><th>โรงพยาบาล</th><th>จังหวัด</th><th>Sales</th><th>วันหมดสัญญา</th><th style="text-align:right">เหลือเวลา</th><th></th></tr></thead>
       <tbody>
       ${items.slice(0, LIMIT).map(({ r, ci }) => {
         const absIdx = STATE.rows.indexOf(r);
@@ -325,6 +333,7 @@ function renderContractRadar(rows) {
           <td>${esc(getCell(r,'SALES')) || '-'}</td>
           <td>${fmtDate(ci.end)}${ci.estimated ? ' <span class="ct-est" title="ยังไม่มีวันที่จริงในชีท — คำนวณจาก Golive + 1 ปี">ประมาณการ</span>' : ''}</td>
           <td style="text-align:right"><span class="ct-days ${exp ? 'exp' : 'near'}">${exp ? 'เกินมา ' + (-ci.days) + ' วัน' : 'อีก ' + ci.days + ' วัน'}</span></td>
+          <td style="width:36px"><button class="icon-btn edit" onclick="event.stopPropagation();openEditModal(${absIdx})" title="แก้วันที่สัญญา (manual)">✏️</button></td>
         </tr>`;
       }).join('')}
       </tbody>
@@ -1118,7 +1127,7 @@ function buildForm(data = {}, opts = {}) {
         <input class="form-control" name="EMAIL" type="email" value="${esc(data.EMAIL||'')}" />
       </div>
 
-      <div class="form-section">สถานะการดำเนินงาน${ro ? ' — อ่านอย่างเดียว (แก้ใน Google Sheet)' : ''}</div>
+      <div class="form-section">สถานะการดำเนินงาน${ro ? ' — สถานะ/วันส่งเครื่อง/Golive อ่านอย่างเดียว · วันที่สัญญาแก้ manual ได้' : ''}</div>
 
       <div class="form-group full">
         ${opts.lockStatus ? `
@@ -1143,13 +1152,13 @@ function buildForm(data = {}, opts = {}) {
       </div>
 
       <div class="form-group">
-        <label>วันที่เริ่มสัญญา</label>
-        ${ro ? roVal(data.CONTRACT_START) : `<input class="form-control" name="CONTRACT_START" type="date" value="${esc(data.CONTRACT_START||'')}" />`}
+        <label>วันที่เริ่มสัญญา${ro ? ' <span style="font-weight:400;color:var(--gray-400)">(แก้ manual ได้)</span>' : ''}</label>
+        <input class="form-control" name="CONTRACT_START" type="date" value="${toInputDate(data.CONTRACT_START)}" />
       </div>
 
       <div class="form-group">
-        <label>วันที่สิ้นสุดสัญญา</label>
-        ${ro ? roVal(data.CONTRACT_END) : `<input class="form-control" name="CONTRACT_END" type="date" value="${esc(data.CONTRACT_END||'')}" />`}
+        <label>วันที่สิ้นสุดสัญญา${ro ? ' <span style="font-weight:400;color:var(--gray-400)">(ว่าง = ใช้ประมาณการ Golive+1ปี)</span>' : ''}</label>
+        <input class="form-control" name="CONTRACT_END" type="date" value="${toInputDate(data.CONTRACT_END)}" />
       </div>
 
       <div class="form-section">เอกสาร</div>
